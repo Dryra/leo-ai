@@ -7,8 +7,8 @@ A real-time AI avatar built with Three.js, React, and OpenAI.
 This project explores next-gen conversational interfaces by combining:
 
 - AI reasoning
-- real-time 3D rendering
-- voice interaction
+- Real-time 3D rendering
+- Voice interaction
 
 Inspired by future human-computer interaction systems.
 
@@ -19,17 +19,15 @@ Inspired by future human-computer interaction systems.
 - 🎭 Facial animation using morph targets
 - 🌌 Futuristic 3D environment
 - 🎧 Audio-reactive visuals
-- 🧬 AI “brain” visualization (WIP)
+- 🧬 AI "brain" visualization (WIP)
 
 ## 🧱 Tech Stack
 
-Frontend:
-
+**Frontend:**
 - React + TypeScript + Vite
 - Three.js (React Three Fiber)
 
-Backend:
-
+**Backend:**
 - Node.js + Express
 - OpenAI API
 
@@ -37,17 +35,17 @@ Backend:
 
 ### 1. Clone
 
-````bash
-git clone https://github.com/YOUR_USERNAME/neuroface-ai.git
-cd neuroface-ai
+```bash
+git clone https://github.com/YOUR_USERNAME/leo-ai.git
+cd leo-ai
+```
 
 ### 2. Install frontend dependencies
 
 ```bash
 cd client
 npm install
-npm run dev
-````
+```
 
 ### 3. Install backend dependencies
 
@@ -56,7 +54,7 @@ cd server
 npm install
 ```
 
-### 4. Create .env
+### 4. Create `.env`
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key_here
@@ -68,13 +66,12 @@ OPENAI_API_KEY=your_openai_api_key_here
 npm run dev
 ```
 
-### 6. Run Backend
+### 6. Run backend
 
 ```bash
 npm run dev
 ```
 
-### 👨‍💻 Author
+## 👨‍💻 Author
 
-_Ahmed Drira_:
-Senior Software Engineer focused on frontend, XR, real-time systems, and AI-powered interactive applications.
+**Ahmed Drira** — Senior Software Engineer focused on frontend, XR, real-time systems, and AI-powered interactive applications.
