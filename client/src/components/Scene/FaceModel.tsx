@@ -79,6 +79,18 @@ const FACE_STATE_VISUALS: Record<
     glow: 3.1,
     scanline: 0.35,
   },
+  ready: {
+    color: "#13cb0d",
+    opacity: 0.82,
+    glow: 3.1,
+    scanline: 0.35,
+  },
+  inspecting: {
+    color: "#dda40a",
+    opacity: 0.82,
+    glow: 3.1,
+    scanline: 0.35,
+  },
 };
 
 export function FaceModel({ facialExpression }: FaceModelProps) {
@@ -120,19 +132,11 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
     const morphMeshes: MorphMesh[] = [];
     const allMeshes: THREE.Mesh[] = [];
     const teeth = scene.getObjectByName("teeth");
-    console.log("teeth", teeth);
     teeth?.remove();
-    console.log("scene", scene);
     scene.traverse((object) => {
       if ((object as THREE.Object3D).isObject3D) {
-        console.log("Object3D", object.name);
-        if (object.name === "teeth") {
-          console.log("deleting teeth");
-          //object.visible = false;
-        }
       }
       if ((object as THREE.Mesh).isMesh) {
-        console.log("mesh ", object.name);
         allMeshes.push(object as THREE.Mesh);
       }
       if (isMorphMesh(object)) {
@@ -146,8 +150,6 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
   const { state, isSpeaking, mouthOpen } = useAgentStore();
 
   useEffect(() => {
-    console.log("Face morph meshes:", morphMeshes);
-
     allMeshes.forEach((mesh) => {
       switch (mesh.name) {
         case "mesh_0":
@@ -322,12 +324,12 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
 
       const expressionByBehavior: Record<HeadBehavior, FacialExpressionName> = {
         idle: "neutral",
-        lookLeft: "listening",
-        lookRight: "listening",
+        lookLeft: "happy",
+        lookRight: "happy",
         lookUp: "thinking",
         lookDown: "thinking",
         curiousTilt: "happy",
-        scanRoom: "thinking",
+        scanRoom: "happy",
         spin360: "happy",
       };
 
@@ -402,15 +404,23 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         nextHeadMotionAtRef.current = time + THREE.MathUtils.randFloat(3, 8);
       }
 
+      // IDLE
       const idleX = Math.sin(time * 1.2) * 0.025;
       const idleY = Math.sin(time * 0.8) * 0.035;
       const idleZ = Math.sin(time * 1.5) * 0.018;
 
+      // SPEAKING
       const speechX = mouthMovement * 0.08;
       const speechZ = Math.sin(time * 10) * mouthMovement * 0.04;
+      const listeningNodX =
+        state === "listening" ? Math.sin(time * 4.2) * 0.07 : 0;
       const stateX = state === "thinking" ? -0.18 : 0;
       const stateY = state === "thinking" ? 0.06 : 0;
       const stateZ = state === "listening" ? 0.12 : 0;
+
+      // INSPECTING
+      const inspectingX =
+        state === "inspecting" || state === "ready" ? 0.32 : 0;
 
       let gestureX = 0;
       let gestureY = 0;
@@ -431,8 +441,34 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         gestureZ = THREE.MathUtils.lerp(motion.from.z, motion.to.z, eased);
       }
 
+      // POSITIONING
+      const targetPositionY =
+        state === "inspecting" || state === "ready" ? 2 : 0;
+
+      const targetPositionZ =
+        state === "inspecting" || state === "ready" ? -2 : 0;
+
+      groupRef.current.position.y = THREE.MathUtils.lerp(
+        groupRef.current.position.y,
+        targetPositionY,
+        0.08,
+      );
+
+      groupRef.current.position.z = THREE.MathUtils.lerp(
+        groupRef.current.position.z,
+        targetPositionZ,
+        0.08,
+      );
+
+      // ROTATION
       const targetRotationX =
-        initialHeadRotationRef.current.x + stateX + gestureX + idleX + speechX;
+        initialHeadRotationRef.current.x +
+        stateX +
+        inspectingX +
+        gestureX +
+        idleX +
+        speechX +
+        listeningNodX;
 
       const targetRotationY =
         initialHeadRotationRef.current.y + stateY + gestureY + idleY;

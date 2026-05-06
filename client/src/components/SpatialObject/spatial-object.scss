@@ -1,0 +1,25 @@
+.objectDropZone {
+  margin: 10px 24px 16px;
+  min-height: 58px;
+  border: 1px dashed rgba(56, 232, 255, 0.55);
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  color: #e5faff;
+  background: rgba(19, 42, 46, 0.42);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.objectDropZone input {
+  display: none;
+}
+
+.objectDropZone.isDragging {
+  border-color: #38e8ff;
+  background: rgba(56, 232, 255, 0.18);
+  transform: translateY(-2px);
+}

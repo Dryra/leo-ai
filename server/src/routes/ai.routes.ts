@@ -3,9 +3,16 @@ import multer from "multer";
 import { OpenAI, toFile } from "openai";
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const router = Router();
 const upload = multer({ dest: "uploads/" });
+
+const objectContext = {
+  summary: "",
+  fileName: "",
+  detectedType: "",
+};
 
 type ConversationMessage = {
   role: "system" | "user" | "assistant";
@@ -26,14 +33,100 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const IMAGE_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const TEXT_EXTENSIONS = [
+  ".txt",
+  ".md",
+  ".json",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".scss",
+  ".css",
+  ".html",
+];
+
+function toDataUrl(filePath: string, mimeType: string) {
+  const base64 = fs.readFileSync(filePath).toString("base64");
+  return `data:${mimeType};base64,${base64}`;
+}
+
+type ObjectAnalysis = {
+  detectedType: string;
+  summary: string;
+  suggestedActions: string[];
+};
+
+function normalizeAnalysis(value: unknown): ObjectAnalysis {
+  if (!value || typeof value !== "object") {
+    throw new Error("Invalid analysis object");
+  }
+
+  const analysis = value as Partial<ObjectAnalysis>;
+
+  return {
+    detectedType:
+      typeof analysis.detectedType === "string"
+        ? analysis.detectedType
+        : "Unknown",
+    summary:
+      typeof analysis.summary === "string"
+        ? analysis.summary
+        : "No summary available.",
+    suggestedActions: Array.isArray(analysis.suggestedActions)
+      ? analysis.suggestedActions.filter(
+          (action): action is string => typeof action === "string",
+        )
+      : ["Summarize it", "Find problems", "Improve it"],
+  };
+}
+
+function parseAnalysis(text: string): ObjectAnalysis {
+  const jsonMatch = text.trim().match(/\{[\s\S]*\}/);
+
+  if (!jsonMatch) {
+    return {
+      detectedType: "Unknown",
+      summary: text.trim(),
+      suggestedActions: ["Summarize it", "Find problems", "Improve it"],
+    };
+  }
+
+  try {
+    return normalizeAnalysis(JSON.parse(jsonMatch[0]));
+  } catch {
+    return {
+      detectedType: "Unknown",
+      summary: text.trim(),
+      suggestedActions: ["Summarize it", "Find problems", "Improve it"],
+    };
+  }
+}
+
 function getConversationInput(userMessage: string) {
   conversationHistory.push({
     role: "user",
     content: userMessage,
   });
 
+  const objectContextMessage: ConversationMessage | null = objectContext.summary
+    ? {
+        role: "system",
+        content: `Current uploaded workspace object:
+Filename: ${objectContext.fileName}
+Type: ${objectContext.detectedType}
+Summary: ${objectContext.summary}
+
+When the user asks follow-up questions like summarize, improve, compare, find problems, or explain, use this uploaded object as context.`,
+      }
+    : null;
+
+  console.log("## context", objectContextMessage);
+
   const recentMessages = [
     systemMessage,
+    ...(objectContextMessage ? [objectContextMessage] : []),
     ...conversationHistory
       .filter((message) => message.role !== "system")
       .slice(-MAX_HISTORY_MESSAGES),
@@ -70,6 +163,132 @@ function rememberAssistantMessage(message: string) {
     }
   }
 }
+
+router.post("/object", upload.single("object"), async (req, res) => {
+  const file = req.file;
+
+  if (!file) {
+    return res.status(400).json({ error: "No object uploaded" });
+  }
+
+  const filePath = path.resolve(file.path);
+  const ext = path.extname(file.originalname).toLowerCase();
+
+  try {
+    const analysisPrompt = `
+Analyze this uploaded object for a futuristic spatial AI workspace.
+
+Return JSON only:
+{
+  "detectedType": "short type label",
+  "summary": "short useful summary",
+  "suggestedActions": ["action 1", "action 2", "action 3"]
+}
+`;
+
+    let response;
+
+    if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
+      response = await openai.responses.create({
+        model: "gpt-4.1-mini",
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: analysisPrompt },
+              {
+                type: "input_image",
+                image_url: toDataUrl(filePath, file.mimetype),
+                detail: "auto",
+              },
+            ],
+          },
+        ],
+      });
+    } else if (file.mimetype === "application/pdf" || ext === ".pdf") {
+      const uploadedFile = await openai.files.create({
+        file: await toFile(fs.createReadStream(filePath), file.originalname, {
+          type: file.mimetype,
+        }),
+        purpose: "user_data",
+      });
+
+      response = await openai.responses.create({
+        model: "gpt-4.1-mini",
+        input: [
+          {
+            role: "user",
+            content: [
+              { type: "input_file", file_id: uploadedFile.id },
+              { type: "input_text", text: analysisPrompt },
+            ],
+          },
+        ],
+      });
+    } else if (TEXT_EXTENSIONS.includes(ext)) {
+      const content = fs.readFileSync(filePath, "utf8").slice(0, 120_000);
+
+      response = await openai.responses.create({
+        model: "gpt-4.1-mini",
+        input: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: `${analysisPrompt}\n\nFilename: ${file.originalname}\n\nContent:\n${content}`,
+              },
+            ],
+          },
+        ],
+      });
+    } else {
+      return res.status(400).json({ error: "Unsupported file type" });
+    }
+
+    const result = parseAnalysis(response.output_text);
+
+    const aiText = `I inspected ${result.detectedType}. ${result.summary}
+
+Try: ${result.suggestedActions.join(", ")}`;
+
+    rememberAssistantMessage(aiText);
+
+    const speech = await openai.audio.speech.create({
+      model: "gpt-4o-mini-tts",
+      voice: "alloy",
+      input: aiText,
+    });
+
+    const audioBuffer = Buffer.from(await speech.arrayBuffer());
+
+    objectContext.summary = result.summary;
+    objectContext.fileName = file.originalname;
+    objectContext.detectedType = result.detectedType;
+
+    conversationHistory.push({
+      role: "user",
+      content: `The user uploaded ${file.originalname}. Object summary: ${result.summary}`,
+    });
+
+    res.json({
+      objectId: randomUUID(),
+      ...result,
+      transcript: `Uploaded ${file.originalname}`,
+      reply: aiText,
+      audio: audioBuffer.toString("base64"),
+      mimeType: "audio/mpeg",
+      emotion: detectEmotion(aiText),
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Object analysis failed" });
+  } finally {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  }
+});
 
 // Text messages
 router.post("/chat", async (req, res) => {

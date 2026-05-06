@@ -4,6 +4,7 @@ import { FaceModel } from "./FaceModel";
 import type { FacialExpressionName } from "../../constants/Expressions";
 import { FuturisticEnvironment } from "./FuturisticEnvironment";
 import { VoiceWaveform } from "./VoiceWaveform";
+import { SpatialObjectDisplay } from "./SpatialObjectDisplay";
 
 export function AgentScene({ facialExpression }: AgentSceneProps) {
   return (
@@ -15,6 +16,7 @@ export function AgentScene({ facialExpression }: AgentSceneProps) {
         <VoiceWaveform color="#38e8ff" />
         <VoiceWaveform color="#a855f7" />
       </group>
+      <SpatialObjectDisplay />
 
       <OrbitControls
         enableRotate={true}

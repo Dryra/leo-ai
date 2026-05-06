@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useAgentStore, type AgentState } from "../../stores/agentStore";
+import { useBackgroundAudioStore } from "../../stores/backgroundAudioStore";
 
 const STATE_VISUALS: Record<
   AgentState,
@@ -37,6 +38,20 @@ const STATE_VISUALS: Record<
   },
   speaking: {
     color: "#22d3ee",
+    ringOpacity: 0.72,
+    lightIntensity: 3.4,
+    particleOpacity: 0.95,
+    pulseSpeed: 8,
+  },
+  ready: {
+    color: "#13cb0d",
+    ringOpacity: 0.72,
+    lightIntensity: 3.4,
+    particleOpacity: 0.95,
+    pulseSpeed: 8,
+  },
+  inspecting: {
+    color: "#dda40a",
     ringOpacity: 0.72,
     lightIntensity: 3.4,
     particleOpacity: 0.95,
@@ -91,6 +106,7 @@ function NeonRing({
 function HologramGrid() {
   const gridRef = useRef<THREE.GridHelper>(null);
   const { state, mouthOpen } = useAgentStore();
+  const { amplitude, bass, mids, highs, isPlaying } = useBackgroundAudioStore();
 
   useFrame(({ clock }) => {
     if (!gridRef.current) return;
@@ -103,10 +119,34 @@ function HologramGrid() {
     const speechBlink =
       state === "speaking" ? Math.sin(time * 18) * mouthOpen * 0.45 : 0;
 
+    const audioPulse = isPlaying ? amplitude : 0;
+    const bassPulse = isPlaying ? bass : 0;
+    const midsPulse = isPlaying ? mids : 0;
+    const highsPulse = isPlaying ? highs : 0;
+
+    const environmentColor = new THREE.Color(visual.color);
+    const bassGlowColor = environmentColor
+      .clone()
+      .lerp(new THREE.Color("#ffffff"), 0.85);
+    const targetScale = 1 + bassPulse * 0.5;
+
+    gridRef.current.scale.setScalar(
+      THREE.MathUtils.lerp(gridRef.current.scale.x, targetScale, 0.12),
+    );
+
     material.transparent = true;
+    material.color.lerp(
+      bassPulse > 0.08 ? bassGlowColor : environmentColor,
+      0.04 + highsPulse * 0.5 + bassPulse * 0.35,
+    );
+
     material.opacity = THREE.MathUtils.lerp(
       material.opacity,
-      visual.ringOpacity * 0.75 + Math.max(0, speechBlink),
+      visual.ringOpacity * 1.25 +
+        audioPulse * 0.5 +
+        bassPulse * 0.45 +
+        midsPulse * 0.1 +
+        Math.max(0, speechBlink),
       0.12,
     );
   });
@@ -114,7 +154,7 @@ function HologramGrid() {
   return (
     <gridHelper
       ref={gridRef}
-      args={[18, 42, "#38e8ff", "#155e75"]}
+      args={[18, 42, "#849c9f", "#155e75"]}
       position={[0, -2.55, 0]}
     />
   );
@@ -273,7 +313,12 @@ export function FuturisticEnvironment() {
   const accentLightRef = useRef<THREE.PointLight>(null);
   const backgroundColorRef = useRef(new THREE.Color("#020617"));
   const fogColorRef = useRef(new THREE.Color("#020617"));
+
   const { state, mouthOpen } = useAgentStore();
+
+  const mainLightTargetRef = useRef(new THREE.Vector3());
+  const sideLightTargetRef = useRef(new THREE.Vector3());
+  const accentLightTargetRef = useRef(new THREE.Vector3());
 
   useFrame(({ clock, scene }) => {
     const visual = STATE_VISUALS[state];
@@ -295,7 +340,29 @@ export function FuturisticEnvironment() {
       scene.fog.color.copy(fogColorRef.current);
     }
 
+    // Light positioning while inspecting or ready
+    const isInspectingObject = state === "inspecting" || state === "ready";
+
+    mainLightTargetRef.current.set(
+      0,
+      isInspectingObject ? 0.7 : 1.3,
+      isInspectingObject ? 1.2 : 2.4,
+    );
+
+    sideLightTargetRef.current.set(
+      isInspectingObject ? -1.2 : -2.5,
+      isInspectingObject ? -0.2 : 0.4,
+      isInspectingObject ? 0.8 : 1.5,
+    );
+
+    accentLightTargetRef.current.set(
+      isInspectingObject ? 1.2 : 2.5,
+      isInspectingObject ? -0.1 : 0.5,
+      isInspectingObject ? 0.8 : 1.2,
+    );
+
     if (mainLightRef.current) {
+      mainLightRef.current.position.lerp(mainLightTargetRef.current, 0.08);
       mainLightRef.current.color.lerp(targetColor, 0.08);
       mainLightRef.current.intensity = THREE.MathUtils.lerp(
         mainLightRef.current.intensity,
@@ -305,6 +372,7 @@ export function FuturisticEnvironment() {
     }
 
     if (sideLightRef.current) {
+      sideLightRef.current.position.lerp(sideLightTargetRef.current, 0.08);
       sideLightRef.current.intensity = THREE.MathUtils.lerp(
         sideLightRef.current.intensity,
         state === "speaking" ? 0.8 + speechBlink * 2 : 1.4,
@@ -313,6 +381,7 @@ export function FuturisticEnvironment() {
     }
 
     if (accentLightRef.current) {
+      accentLightRef.current.position.lerp(accentLightTargetRef.current, 0.08);
       accentLightRef.current.color.lerp(targetColor, 0.06);
       accentLightRef.current.intensity = THREE.MathUtils.lerp(
         accentLightRef.current.intensity,

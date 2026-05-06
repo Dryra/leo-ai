@@ -34,3 +34,24 @@ export async function sendVoiceMessage(audioBlob: Blob) {
     emotion: "neutral" | "happy" | "sad" | "angry" | "bored";
   };
 }
+
+export async function uploadObject(file: File) {
+  const formData = new FormData();
+  formData.append("object", file);
+
+  const response = await axios.post(`${API_URL}/api/ai/object`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+
+  return response.data as {
+    objectId: string;
+    detectedType: string;
+    summary: string;
+    suggestedActions: string[];
+    transcript: string;
+    reply: string;
+    audio: string;
+    mimeType: string;
+    emotion: "neutral" | "happy" | "sad" | "angry" | "bored";
+  };
+}

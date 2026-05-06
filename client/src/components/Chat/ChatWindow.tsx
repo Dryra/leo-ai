@@ -4,6 +4,8 @@ import { base64ToAudioUrl, playAudioWithVolume } from "../../services/audio";
 import { useAgentStore } from "../../stores/agentStore";
 import { useVoiceRecorder } from "../../hooks/useVoiceRecorder";
 import type { FacialExpressionName } from "../../constants/Expressions";
+import { ObjectDropZone } from "../SpatialObject/ObjectDropZone";
+import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
 
 type ChatMessage = {
   id: string;
@@ -11,15 +13,24 @@ type ChatMessage = {
   content: string;
 };
 
-export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
+export function ChatWindow({
+  className = "",
+  setFacialExpression,
+}: ChatWindowProps) {
   const [, setTranscript] = useState("");
   const [, setReply] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
-  const { state, setState, setSpeaking, setEmotion, setMouthOpen } =
-    useAgentStore();
+  const {
+    state,
+    setState,
+    setSpeaking,
+    setEmotion,
+    setMouthOpen,
+    setAfterSpeakingState,
+  } = useAgentStore();
   const { isRecording, startRecording, stopRecording } = useVoiceRecorder();
 
   const [message, setMessage] = useState("");
@@ -52,6 +63,8 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
 
     if (!userMessage) return;
 
+    const returnStateAfterSpeaking = getReturnStateAfterSpeaking();
+
     setChatMessages((messages) => [
       ...messages,
       {
@@ -81,6 +94,9 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
 
       const audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
 
+      if (returnStateAfterSpeaking) {
+        setAfterSpeakingState(returnStateAfterSpeaking);
+      }
       setSpeaking(true);
       await playAudioWithVolume(audioUrl, (volume) => {
         setMouthOpen(volume);
@@ -89,19 +105,29 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
       setMouthOpen(0);
       setSpeaking(false);
       URL.revokeObjectURL(audioUrl);
-      setState("idle");
     } catch (err) {
       console.error(err);
       setError("Something went wrong with the text request.");
       setSpeaking(false);
       setMouthOpen(0);
-      setState("idle");
+      setState(returnStateAfterSpeaking ?? "idle");
     } finally {
       setLoading(false);
     }
   }
 
+  function getReturnStateAfterSpeaking() {
+    const currentObject = useSpatialObjectStore.getState().object;
+
+    if (!currentObject || currentObject.status === "error") return null;
+    if (currentObject.status === "ready") return "ready";
+
+    return "inspecting";
+  }
+
   async function processVoiceMessage(audioBlob: Blob) {
+    const returnStateAfterSpeaking = getReturnStateAfterSpeaking();
+
     setState("thinking");
     setFacialExpression("thinking");
 
@@ -127,6 +153,9 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
 
     const audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
 
+    if (returnStateAfterSpeaking) {
+      setAfterSpeakingState(returnStateAfterSpeaking);
+    }
     setSpeaking(true);
     await playAudioWithVolume(audioUrl, (volume) => {
       setMouthOpen(volume);
@@ -135,7 +164,6 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
     setMouthOpen(0);
     setSpeaking(false);
     URL.revokeObjectURL(audioUrl);
-    setState("idle");
   }
 
   async function handleVoiceClick() {
@@ -274,9 +302,8 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
   ]);
 
   return (
-    <div className="chat-window">
+    <div className={["chat-window", className].filter(Boolean).join(" ")}>
       <div className="chatHeader">
-        <button className="hideChatWindow"></button>
         <h2>LEO AI</h2>
 
         <p>State: {state}</p>
@@ -294,7 +321,7 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
                 chatMessage.role === "user" ? "senderUser" : "senderAgent"
               }
             >
-              <strong>{chatMessage.role === "user" ? "You:" : "Agent:"}</strong>
+              <strong>{chatMessage.role === "user" ? "You:" : "Leo:"}</strong>
             </div>
             <div
               className={
@@ -309,7 +336,7 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
         {loading && (
           <div className="agentMessage">
             <div className="senderAgent">
-              <strong>Agent:</strong>
+              <strong>Leo:</strong>
             </div>
             <div className="message agent">
               <p>Thinking...</p>
@@ -348,10 +375,38 @@ export function ChatWindow({ setFacialExpression }: ChatWindowProps) {
       >
         {isRecording ? "Stop Recording" : "Start Voice Chat"}
       </button>
+      <ObjectDropZone
+        onAnalysisComplete={async (result) => {
+          setReply(result.reply);
+          setEmotion(result.emotion);
+          setFacialExpression(result.emotion);
+          setChatMessages((messages) => [
+            ...messages,
+            {
+              id: crypto.randomUUID(),
+              role: "agent",
+              content: result.reply,
+            },
+          ]);
+
+          const audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
+
+          setAfterSpeakingState("ready");
+          setSpeaking(true);
+          await playAudioWithVolume(audioUrl, (volume) => {
+            setMouthOpen(volume);
+          });
+
+          setMouthOpen(0);
+          setSpeaking(false);
+          URL.revokeObjectURL(audioUrl);
+        }}
+      />
     </div>
   );
 }
 
 type ChatWindowProps = {
+  className?: string;
   setFacialExpression: (expression: FacialExpressionName) => void;
 };
