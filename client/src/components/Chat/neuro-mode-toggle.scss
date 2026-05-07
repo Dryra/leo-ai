@@ -1,0 +1,35 @@
+.neuroMode {
+  left: 12px;
+  top: 12px;
+  z-index: 1000;
+
+  position: absolute;
+  .neuroModeButton {
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: none;
+    color: #ffffff;
+    font-weight: 800;
+    cursor: pointer;
+
+    &::before {
+      content: "";
+      width: 24px;
+      height: 24px;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: contain;
+    }
+  }
+
+  .neuroModeButton {
+    border-radius: 10px;
+
+    &::before {
+      background-image: url("./assets/icons/close_fullscreen.svg");
+    }
+  }
+}

@@ -147,6 +147,34 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
     return { morphMeshes, allMeshes };
   }, [scene]);
 
+  // Neuro Mode useEffect, move to upper?
+  useEffect(() => {
+    const headMesh = scene.getObjectByName("mesh_2") as THREE.Mesh | undefined;
+    if (!headMesh || !headMesh.geometry) return;
+
+    const wireframeMaterial = new THREE.MeshBasicMaterial({
+      color: "#38e8ff",
+      wireframe: true,
+      transparent: true,
+      opacity: 0.05,
+      depthTest: true,
+    });
+
+    const wireframeHead = new THREE.Mesh(headMesh.geometry, wireframeMaterial);
+    wireframeHead.name = "neuro_wireframe_head";
+    wireframeHead.scale.setScalar(1.01);
+    wireframeHead.renderOrder = 30;
+
+    headMesh.add(wireframeHead);
+    wireframeHead.morphTargetDictionary = headMesh.morphTargetDictionary;
+    wireframeHead.morphTargetInfluences = headMesh.morphTargetInfluences;
+
+    return () => {
+      headMesh.remove(wireframeHead);
+      wireframeMaterial.dispose();
+    };
+  }, [scene]);
+
   const { state, isSpeaking, mouthOpen } = useAgentStore();
 
   useEffect(() => {
@@ -158,13 +186,6 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         case "mesh_1":
           mesh.material = blueMaterial;
           break;
-        case "mesh_2":
-          //mesh.material = redMaterial;
-          break;
-        case "mesh_3":
-          //mesh.material = redMaterial;
-
-          break;
 
         default:
           break;
@@ -173,41 +194,7 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
       //console.log("Morph targets:", mesh.morphTargetDictionary);
     });
 
-    const shellMeshes = morphMeshes
-      .filter((mesh) => mesh.name !== "mesh_2")
-      .map((mesh) => {
-        const material = createHologramMaterial("#38bdf8");
-        material.depthTest = false;
-        material.uniforms.uOpacity.value = 0.8;
-
-        const shell = new THREE.Mesh(
-          mesh.geometry,
-          material,
-        ) as unknown as HologramShellMesh;
-
-        shell.name = `${mesh.name}_hologram_shell`;
-        shell.renderOrder = 20;
-        shell.scale.setScalar(1.015);
-        shell.morphTargetDictionary = mesh.morphTargetDictionary;
-        shell.morphTargetInfluences = [...mesh.morphTargetInfluences];
-        shell.userData.sourceMesh = mesh;
-        //if (mesh.name !== "mesh_2") {
-        mesh.add(shell);
-        //}
-
-        return shell;
-      });
-
-    shellMeshesRef.current = shellMeshes;
-
-    return () => {
-      shellMeshes.forEach((shell) => {
-        shell.parent?.remove(shell);
-        (shell.material as THREE.Material).dispose();
-      });
-
-      shellMeshesRef.current = [];
-    };
+    return () => {};
   }, [allMeshes, morphMeshes]);
 
   const applyFacialExpression = (

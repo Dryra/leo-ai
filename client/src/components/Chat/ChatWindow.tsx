@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { sendMessage, sendVoiceMessage } from "../../services/api";
 import { base64ToAudioUrl, playAudioWithVolume } from "../../services/audio";
 import { useAgentStore } from "../../stores/agentStore";
@@ -7,6 +7,9 @@ import type { FacialExpressionName } from "../../constants/Expressions";
 import { ObjectDropZone } from "../SpatialObject/ObjectDropZone";
 import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
 import { playUiSound } from "../../services/uiSounds";
+import { NeuroModeToggle } from "./NeuroModeToggle";
+import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
+import { useAlwaysListening } from "../../hooks/useAlwaysLIstening";
 
 type ChatMessage = {
   id: string;
@@ -59,14 +62,14 @@ export function ChatWindow({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [now, setNow] = useState(Date.now());
 
-  const {
-    state,
-    setState,
-    setSpeaking,
-    setEmotion,
-    setMouthOpen,
-    setAfterSpeakingState,
-  } = useAgentStore();
+  const state = useAgentStore((store) => store.state);
+  const setState = useAgentStore((store) => store.setState);
+  const setSpeaking = useAgentStore((store) => store.setSpeaking);
+  const setEmotion = useAgentStore((store) => store.setEmotion);
+  const setMouthOpen = useAgentStore((store) => store.setMouthOpen);
+  const setAfterSpeakingState = useAgentStore(
+    (store) => store.setAfterSpeakingState,
+  );
   const { isRecording, startRecording, stopRecording } = useVoiceRecorder();
 
   const [message, setMessage] = useState("");
@@ -78,6 +81,21 @@ export function ChatWindow({
   const isStartingSpaceRecordingRef = useRef(false);
   const spaceHoldTimeoutRef = useRef<number | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+  const neuroEnabled = useNeuroVoiceStore((state) => state.enabled);
+  const setNeuroState = useNeuroVoiceStore((state) => state.setState);
+
+  const handleNeuroUtterance = useCallback(
+    async (audioBlob: Blob) => {
+      await processVoiceMessage(audioBlob);
+    },
+    [processVoiceMessage],
+  );
+
+  useAlwaysListening({
+    enabled: neuroEnabled && !isRecording && state !== "speaking",
+    onUtterance: handleNeuroUtterance,
+  });
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -295,13 +313,16 @@ export function ChatWindow({
 
       const audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
 
+      setNeuroState("agentSpeaking");
       setSpeaking(true);
+
       await playAudioWithVolume(audioUrl, (volume) => {
         setMouthOpen(volume);
       });
 
       setMouthOpen(0);
       setSpeaking(false);
+      setNeuroState("idle");
       URL.revokeObjectURL(audioUrl);
     } catch (error) {
       setChatMessages((messages) =>
@@ -453,8 +474,8 @@ export function ChatWindow({
   return (
     <div className={["chat-window", className].filter(Boolean).join(" ")}>
       <div className="chatHeader">
+        <NeuroModeToggle />
         <h2>LEO AI</h2>
-
         <p>State: {state}</p>
       </div>
       <div className="messagesContainer" ref={messagesContainerRef}>

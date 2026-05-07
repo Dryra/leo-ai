@@ -16,7 +16,8 @@ type AgentStore = {
   isSpeaking: boolean;
   mouthOpen: number;
   afterSpeakingState: AgentState | null;
-
+  voiceLevel: number;
+  setVoiceLevel: (value: number) => void;
   setState: (state: AgentState) => void;
   setEmotion: (emotion: AgentEmotion) => void;
   setSpeaking: (value: boolean) => void;
@@ -30,6 +31,8 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
   isSpeaking: false,
   mouthOpen: 0,
   afterSpeakingState: null,
+  voiceLevel: 0,
+  setVoiceLevel: (value) => set({ voiceLevel: value }),
   setState: (state) => set({ state }),
   setEmotion: (emotion) => set({ emotion }),
   setMouthOpen: (value) => set({ mouthOpen: value }),
