@@ -1,0 +1,58 @@
+.hintSection {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(520px, calc(100vw - 48px));
+  min-height: 40px;
+  padding: 10px 14px;
+  color: #e5faff;
+  border-radius: 16px;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.hintSectionIcon {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  background-color: #ffffff;
+  mask: url("../../assets/icons/lightbulb.svg") center / contain no-repeat;
+  -webkit-mask: url("../../assets/icons/lightbulb.svg") center / contain
+    no-repeat;
+}
+
+.hintSectionText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}
+
+.hintSectionText.isVisible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hintSectionText.isHidden {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+@media (max-width: 768px) {
+  .hintSection {
+    bottom: 366px;
+  }
+}

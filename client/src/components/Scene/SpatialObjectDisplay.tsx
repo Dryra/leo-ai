@@ -1,7 +1,11 @@
 // client/src/components/Scene/SpatialObjectDisplay.tsx
-import { Html, useTexture } from "@react-three/drei";
+import { Html, useTexture, useGLTF } from "@react-three/drei";
 import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
 import { useAgentStore } from "../../stores/agentStore";
+
+import { useFrame } from "@react-three/fiber";
+import { Suspense, useRef } from "react";
+import type { Group } from "three";
 
 function ImageObject({ url }: { url: string }) {
   const texture = useTexture(url);
@@ -28,14 +32,9 @@ export function SpatialObjectDisplay() {
 
   return (
     <group position={[0, -1.15, 0.45]} rotation={[-0.35, 0, 0]}>
-      <mesh>
-        <boxGeometry args={[2.2, 1.35, 0.06]} />
-        <meshStandardMaterial
-          color="#132a2e"
-          emissive="#38e8ff"
-          emissiveIntensity={0.35}
-        />
-      </mesh>
+      <Suspense fallback={null}>
+        <ModelObject />
+      </Suspense>
 
       <Html center transform>
         <div className="spatialObjectCard">
@@ -45,3 +44,22 @@ export function SpatialObjectDisplay() {
     </group>
   );
 }
+
+function ModelObject() {
+  const groupRef = useRef<Group>(null);
+  const { scene } = useGLTF("/models/file.glb");
+
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * 0.35;
+    }
+  });
+
+  return (
+    <group ref={groupRef} scale={1}>
+      <primitive object={scene} />
+    </group>
+  );
+}
+
+useGLTF.preload("/models/file.glb");

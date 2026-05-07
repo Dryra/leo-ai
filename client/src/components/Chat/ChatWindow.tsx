@@ -6,12 +6,47 @@ import { useVoiceRecorder } from "../../hooks/useVoiceRecorder";
 import type { FacialExpressionName } from "../../constants/Expressions";
 import { ObjectDropZone } from "../SpatialObject/ObjectDropZone";
 import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
+import { playUiSound } from "../../services/uiSounds";
 
 type ChatMessage = {
   id: string;
   role: "user" | "agent";
   content: string;
+  createdAt: number;
+  attachment?: ChatAttachment;
+  isPending?: boolean;
 };
+
+type ChatAttachment = {
+  fileName: string;
+  mimeType: string;
+  data: string; // base64
+};
+
+// Format the timing
+function formatMessageTime(createdAt: number, now: number) {
+  const secondsAgo = Math.max(0, Math.floor((now - createdAt) / 1000));
+
+  if (secondsAgo < 60) {
+    if (secondsAgo <= 1) return "just now";
+
+    return `${secondsAgo} seconds ago`;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(createdAt));
+}
+
+// Convert attachement to downloadable
+function attachmentToDownloadUrl(attachment: ChatAttachment) {
+  const binary = atob(attachment.data);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const blob = new Blob([bytes], { type: attachment.mimeType });
+
+  return URL.createObjectURL(blob);
+}
 
 export function ChatWindow({
   className = "",
@@ -22,6 +57,7 @@ export function ChatWindow({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [now, setNow] = useState(Date.now());
 
   const {
     state,
@@ -58,12 +94,22 @@ export function ChatWindow({
     return () => cancelAnimationFrame(frame);
   }, [chatMessages, loading]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
   async function handleSend() {
     const userMessage = message.trim();
 
     if (!userMessage) return;
 
     const returnStateAfterSpeaking = getReturnStateAfterSpeaking();
+    const pendingAgentMessageId = crypto.randomUUID();
+    const createdAt = Date.now();
 
     setChatMessages((messages) => [
       ...messages,
@@ -71,6 +117,14 @@ export function ChatWindow({
         id: crypto.randomUUID(),
         role: "user",
         content: userMessage,
+        createdAt,
+      },
+      {
+        id: pendingAgentMessageId,
+        role: "agent",
+        content: "Thinking...",
+        createdAt,
+        isPending: true,
       },
     ]);
     setMessage("");
@@ -80,23 +134,33 @@ export function ChatWindow({
 
     try {
       const result = await sendMessage(userMessage);
+
+      // Wirte the file result to the spiatial display
+      if (result.attachment) {
+        displayAttachmentInWorkspace(result.attachment);
+        setAfterSpeakingState("ready");
+      } else if (returnStateAfterSpeaking) {
+        setAfterSpeakingState(returnStateAfterSpeaking);
+      }
+
       setReply(result.text);
       setEmotion(result.emotion);
       setFacialExpression(result.emotion);
-      setChatMessages((messages) => [
-        ...messages,
-        {
-          id: crypto.randomUUID(),
-          role: "agent",
-          content: result.text,
-        },
-      ]);
+      setChatMessages((messages) =>
+        messages.map((chatMessage) =>
+          chatMessage.id === pendingAgentMessageId
+            ? {
+                ...chatMessage,
+                content: result.text,
+                attachment: result.attachment,
+                isPending: false,
+              }
+            : chatMessage,
+        ),
+      );
 
       const audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
 
-      if (returnStateAfterSpeaking) {
-        setAfterSpeakingState(returnStateAfterSpeaking);
-      }
       setSpeaking(true);
       await playAudioWithVolume(audioUrl, (volume) => {
         setMouthOpen(volume);
@@ -108,12 +172,52 @@ export function ChatWindow({
     } catch (err) {
       console.error(err);
       setError("Something went wrong with the text request.");
+      setChatMessages((messages) =>
+        messages.filter(
+          (chatMessage) => chatMessage.id !== pendingAgentMessageId,
+        ),
+      );
       setSpeaking(false);
       setMouthOpen(0);
       setState(returnStateAfterSpeaking ?? "idle");
     } finally {
       setLoading(false);
     }
+  }
+
+  function displayAttachmentInWorkspace(attachment: ChatAttachment) {
+    const currentObject = useSpatialObjectStore.getState().object;
+
+    // CLeanup current loaded object if any
+    if (currentObject?.previewUrl) {
+      URL.revokeObjectURL(currentObject.previewUrl);
+    }
+
+    const blob = attachmentToBlob(attachment);
+    const previewUrl = URL.createObjectURL(blob);
+
+    useSpatialObjectStore.getState().setObject({
+      id: crypto.randomUUID(),
+      kind: getSpatialObjectKind(attachment.mimeType),
+      fileName: attachment.fileName,
+      mimeType: attachment.mimeType,
+      previewUrl,
+      status: "ready",
+    });
+  }
+
+  function attachmentToBlob(attachment: ChatAttachment) {
+    const binary = atob(attachment.data);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+
+    return new Blob([bytes], { type: attachment.mimeType });
+  }
+
+  function getSpatialObjectKind(mimeType: string) {
+    if (mimeType.startsWith("image/")) return "image";
+    if (mimeType === "application/pdf") return "pdf";
+
+    return "text";
   }
 
   function getReturnStateAfterSpeaking() {
@@ -127,43 +231,88 @@ export function ChatWindow({
 
   async function processVoiceMessage(audioBlob: Blob) {
     const returnStateAfterSpeaking = getReturnStateAfterSpeaking();
+    const pendingUserMessageId = crypto.randomUUID();
+    const pendingAgentMessageId = crypto.randomUUID();
+    const createdAt = Date.now();
 
     setState("thinking");
     setFacialExpression("thinking");
-
-    const result = await sendVoiceMessage(audioBlob);
-
-    setTranscript(result.transcript);
-    setReply(result.reply);
-    setEmotion(result.emotion);
-    setFacialExpression(result.emotion);
     setChatMessages((messages) => [
       ...messages,
       {
-        id: crypto.randomUUID(),
+        id: pendingUserMessageId,
         role: "user",
-        content: result.transcript,
+        content: "Voice message...",
+        createdAt,
+        isPending: true,
       },
       {
-        id: crypto.randomUUID(),
+        id: pendingAgentMessageId,
         role: "agent",
-        content: result.reply,
+        content: "Thinking...",
+        createdAt,
+        isPending: true,
       },
     ]);
 
-    const audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
+    try {
+      const result = await sendVoiceMessage(audioBlob);
 
-    if (returnStateAfterSpeaking) {
-      setAfterSpeakingState(returnStateAfterSpeaking);
+      if (result.attachment) {
+        displayAttachmentInWorkspace(result.attachment);
+        setAfterSpeakingState("ready");
+      } else if (returnStateAfterSpeaking) {
+        setAfterSpeakingState(returnStateAfterSpeaking);
+      }
+
+      setTranscript(result.transcript);
+      playUiSound("messagePop");
+      setReply(result.reply);
+      setEmotion(result.emotion);
+      setFacialExpression(result.emotion);
+      setChatMessages((messages) =>
+        messages.map((chatMessage) => {
+          if (chatMessage.id === pendingUserMessageId) {
+            return {
+              ...chatMessage,
+              content: result.transcript,
+              isPending: false,
+            };
+          }
+
+          if (chatMessage.id === pendingAgentMessageId) {
+            return {
+              ...chatMessage,
+              content: result.reply,
+              attachment: result.attachment,
+              isPending: false,
+            };
+          }
+
+          return chatMessage;
+        }),
+      );
+
+      const audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
+
+      setSpeaking(true);
+      await playAudioWithVolume(audioUrl, (volume) => {
+        setMouthOpen(volume);
+      });
+
+      setMouthOpen(0);
+      setSpeaking(false);
+      URL.revokeObjectURL(audioUrl);
+    } catch (error) {
+      setChatMessages((messages) =>
+        messages.filter(
+          (chatMessage) =>
+            chatMessage.id !== pendingUserMessageId &&
+            chatMessage.id !== pendingAgentMessageId,
+        ),
+      );
+      throw error;
     }
-    setSpeaking(true);
-    await playAudioWithVolume(audioUrl, (volume) => {
-      setMouthOpen(volume);
-    });
-
-    setMouthOpen(0);
-    setSpeaking(false);
-    URL.revokeObjectURL(audioUrl);
   }
 
   async function handleVoiceClick() {
@@ -321,7 +470,10 @@ export function ChatWindow({
                 chatMessage.role === "user" ? "senderUser" : "senderAgent"
               }
             >
-              <strong>{chatMessage.role === "user" ? "You:" : "Leo:"}</strong>
+              <strong>{chatMessage.role === "user" ? "You" : "Leo"}</strong>
+              <time dateTime={new Date(chatMessage.createdAt).toISOString()}>
+                {formatMessageTime(chatMessage.createdAt, now)}
+              </time>
             </div>
             <div
               className={
@@ -329,26 +481,17 @@ export function ChatWindow({
               }
             >
               <p>{chatMessage.content}</p>
+              {chatMessage.attachment && (
+                <ChatAttachmentLink attachment={chatMessage.attachment} />
+              )}
             </div>
           </div>
         ))}
-
-        {loading && (
-          <div className="agentMessage">
-            <div className="senderAgent">
-              <strong>Leo:</strong>
-            </div>
-            <div className="message agent">
-              <p>Thinking...</p>
-            </div>
-          </div>
-        )}
       </div>
 
       {error && <p className="error">{error}</p>}
 
       <div className="bottom-row">
-        <p className="recondingHint">Hold Space bar to start recording.</p>
         <div className="input-row">
           <input
             name="chat"
@@ -386,6 +529,7 @@ export function ChatWindow({
               id: crypto.randomUUID(),
               role: "agent",
               content: result.reply,
+              createdAt: Date.now(),
             },
           ]);
 
@@ -403,6 +547,23 @@ export function ChatWindow({
         }}
       />
     </div>
+  );
+}
+
+function ChatAttachmentLink({ attachment }: { attachment: ChatAttachment }) {
+  const [url, setUrl] = useState("");
+
+  useEffect(() => {
+    const nextUrl = attachmentToDownloadUrl(attachment);
+    setUrl(nextUrl);
+
+    return () => URL.revokeObjectURL(nextUrl);
+  }, [attachment]);
+
+  return (
+    <a className="chatAttachment" href={url} download={attachment.fileName}>
+      Download {attachment.fileName}
+    </a>
   );
 }
 

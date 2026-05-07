@@ -2,62 +2,9 @@ import { Float, Stars } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { useAgentStore, type AgentState } from "../../stores/agentStore";
+import { useAgentStore } from "../../stores/agentStore";
 import { useBackgroundAudioStore } from "../../stores/backgroundAudioStore";
-
-const STATE_VISUALS: Record<
-  AgentState,
-  {
-    color: string;
-    ringOpacity: number;
-    lightIntensity: number;
-    particleOpacity: number;
-    pulseSpeed: number;
-  }
-> = {
-  idle: {
-    color: "#38e8ff",
-    ringOpacity: 0.35,
-    lightIntensity: 1.8,
-    particleOpacity: 0.55,
-    pulseSpeed: 1.4,
-  },
-  listening: {
-    color: "#60a5fa",
-    ringOpacity: 0.5,
-    lightIntensity: 2.2,
-    particleOpacity: 0.7,
-    pulseSpeed: 1.8,
-  },
-  thinking: {
-    color: "#a855f7",
-    ringOpacity: 0.58,
-    lightIntensity: 2.7,
-    particleOpacity: 0.82,
-    pulseSpeed: 3,
-  },
-  speaking: {
-    color: "#22d3ee",
-    ringOpacity: 0.72,
-    lightIntensity: 3.4,
-    particleOpacity: 0.95,
-    pulseSpeed: 8,
-  },
-  ready: {
-    color: "#13cb0d",
-    ringOpacity: 0.72,
-    lightIntensity: 3.4,
-    particleOpacity: 0.95,
-    pulseSpeed: 8,
-  },
-  inspecting: {
-    color: "#dda40a",
-    ringOpacity: 0.72,
-    lightIntensity: 3.4,
-    particleOpacity: 0.95,
-    pulseSpeed: 8,
-  },
-};
+import { STATE_VISUALS } from "../../constants/stateVisuals";
 
 function NeonRing({
   radius,
@@ -220,7 +167,7 @@ function FloatingParticles() {
         baseZ + Math.cos(time * 0.45 + phase) * velocities[index + 2];
       let followSpeed = 1.8;
 
-      if (state === "thinking") {
+      if (state === "thinking" || state === "inspecting") {
         const radius = Math.max(0.8, Math.hypot(baseX, baseZ) * 0.55);
         const angle = Math.atan2(baseZ, baseX) + time * 0.75 + phase * 0.18;
 

@@ -12,6 +12,11 @@ export async function sendMessage(message: string) {
     audio: string;
     mimeType: string;
     emotion: "neutral" | "happy" | "sad" | "angry" | "bored";
+    attachment?: {
+      fileName: string;
+      mimeType: string;
+      data: string;
+    };
   };
 }
 
@@ -32,15 +37,21 @@ export async function sendVoiceMessage(audioBlob: Blob) {
     audio: string;
     mimeType: string;
     emotion: "neutral" | "happy" | "sad" | "angry" | "bored";
+    attachment?: {
+      fileName: string;
+      mimeType: string;
+      data: string;
+    };
   };
 }
 
-export async function uploadObject(file: File) {
+export async function uploadObject(file: File, signal?: AbortSignal) {
   const formData = new FormData();
   formData.append("object", file);
 
   const response = await axios.post(`${API_URL}/api/ai/object`, formData, {
     headers: { "Content-Type": "multipart/form-data" },
+    signal,
   });
 
   return response.data as {
@@ -54,4 +65,8 @@ export async function uploadObject(file: File) {
     mimeType: string;
     emotion: "neutral" | "happy" | "sad" | "angry" | "bored";
   };
+}
+
+export async function clearUploadedObject() {
+  await axios.delete(`${API_URL}/api/ai/object`);
 }
