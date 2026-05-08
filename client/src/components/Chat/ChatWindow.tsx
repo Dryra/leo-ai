@@ -6,7 +6,6 @@ import { useVoiceRecorder } from "../../hooks/useVoiceRecorder";
 import type { FacialExpressionName } from "../../constants/Expressions";
 import { ObjectDropZone } from "../SpatialObject/ObjectDropZone";
 import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
-import { playUiSound } from "../../services/uiSounds";
 import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
 import { useAlwaysListening } from "../../hooks/useAlwaysLIstening";
 
