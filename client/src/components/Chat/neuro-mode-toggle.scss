@@ -12,6 +12,13 @@
 @media (max-width: 768px) {
   .neuroMode {
     left: 24px;
+    //transform: translateY(266px);
+  }
+}
+
+@media (max-width: 768px) {
+  .neuroModeCollapsed {
+    transform: translateY(266px);
   }
 }
 

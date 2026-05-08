@@ -200,6 +200,13 @@
   .hideChatWindow,
   .showChatWindow {
     right: 24px;
+    //transform: translateY(266px);
+  }
+}
+
+@media (max-width: 768px) {
+  .showChatWindow {
+    transform: translateY(266px);
   }
 }
 
