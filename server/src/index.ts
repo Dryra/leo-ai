@@ -5,7 +5,13 @@ import aiRoutes from "./routes/ai.routes";
 
 const app = express();
 
-app.use(cors({ origin: "http://localhost:5173" }));
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://192.168.178.26:5173",
+  process.env.CLIENT_URL,
+].filter((origin): origin is string => Boolean(origin));
+
+app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
 app.use("/api/ai", aiRoutes);
