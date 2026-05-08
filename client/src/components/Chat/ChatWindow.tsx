@@ -283,7 +283,7 @@ export function ChatWindow({
       }
 
       setTranscript(result.transcript);
-      playUiSound("messagePop");
+      //playUiSound("messagePop");
       setReply(result.reply);
       setEmotion(result.emotion);
       setFacialExpression(result.emotion);
