@@ -10,17 +10,38 @@ export function base64ToAudioUrl(base64: string, mimeType: string) {
   return URL.createObjectURL(blob);
 }
 
-export function playAudioWithVolume(
+let sharedAudioContext: AudioContext | null = null;
+
+function getAudioContext() {
+  sharedAudioContext ??= new AudioContext();
+  return sharedAudioContext;
+}
+
+export async function prepareAudioPlayback() {
+  const audioContext = getAudioContext();
+
+  if (audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+}
+
+export async function playAudioWithVolume(
   url: string,
   onVolume: (volume: number) => void,
 ) {
-  return new Promise<void>((resolve, reject) => {
-    const audio = new Audio(url);
-    const audioContext = new AudioContext();
+  await prepareAudioPlayback();
 
-    const source = audioContext.createMediaElementSource(audio);
+  const audioContext = getAudioContext();
+  const response = await fetch(url);
+  const audioBuffer = await audioContext.decodeAudioData(
+    await response.arrayBuffer(),
+  );
+
+  return new Promise<void>((resolve, reject) => {
+    const source = audioContext.createBufferSource();
     const analyser = audioContext.createAnalyser();
 
+    source.buffer = audioBuffer;
     analyser.fftSize = 1024;
     analyser.smoothingTimeConstant = 0.65;
 
@@ -31,6 +52,7 @@ export function playAudioWithVolume(
 
     let animationFrame = 0;
     let smoothed = 0;
+    let settled = false;
 
     function tick() {
       analyser.getByteTimeDomainData(data);
@@ -63,24 +85,27 @@ export function playAudioWithVolume(
       animationFrame = requestAnimationFrame(tick);
     }
 
-    audio.onplay = () => {
-      tick();
-    };
-
-    audio.onended = async () => {
+    function cleanup() {
       cancelAnimationFrame(animationFrame);
       onVolume(0);
-      await audioContext.close();
+      source.disconnect();
+      analyser.disconnect();
+    }
+
+    source.onended = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       resolve();
     };
 
-    audio.onerror = async () => {
-      cancelAnimationFrame(animationFrame);
-      onVolume(0);
-      await audioContext.close();
-      reject(new Error("Audio playback failed"));
-    };
-
-    audio.play().catch(reject);
+    try {
+      tick();
+      source.start();
+    } catch (error) {
+      settled = true;
+      cleanup();
+      reject(error);
+    }
   });
 }

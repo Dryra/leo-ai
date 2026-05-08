@@ -126,7 +126,11 @@ export function useAlwaysListening({
         setNeuroState("thinking");
         setAgentState("thinking");
 
-        await onUtteranceRef.current(blob);
+        try {
+          await onUtteranceRef.current(blob);
+        } catch (error) {
+          console.error("Could not process neuro voice utterance.", error);
+        }
 
         modeRef.current = "idle";
         setNeuroState("idle");

@@ -250,6 +250,7 @@ export function ChatWindow({
     const pendingUserMessageId = crypto.randomUUID();
     const pendingAgentMessageId = crypto.randomUUID();
     const createdAt = Date.now();
+    let audioUrl: string | null = null;
 
     setState("thinking");
     setFacialExpression("thinking");
@@ -309,7 +310,7 @@ export function ChatWindow({
         }),
       );
 
-      const audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
+      audioUrl = base64ToAudioUrl(result.audio, result.mimeType);
 
       setNeuroState("agentSpeaking");
       setSpeaking(true);
@@ -321,7 +322,6 @@ export function ChatWindow({
       setMouthOpen(0);
       setSpeaking(false);
       setNeuroState("idle");
-      URL.revokeObjectURL(audioUrl);
     } catch (error) {
       setChatMessages((messages) =>
         messages.filter(
@@ -330,7 +330,14 @@ export function ChatWindow({
             chatMessage.id !== pendingAgentMessageId,
         ),
       );
+      setMouthOpen(0);
+      setSpeaking(false);
+      setNeuroState("idle");
       throw error;
+    } finally {
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
     }
   }
 
