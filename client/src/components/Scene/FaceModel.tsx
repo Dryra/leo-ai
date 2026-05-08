@@ -14,6 +14,7 @@ import {
 
 import { createHologramMaterial } from "./createHologramMaterial";
 import { AIBrain } from "./AIBrain";
+import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
 
 type FaceModelProps = {
   facialExpression: FacialExpressionName;
@@ -96,9 +97,12 @@ const FACE_STATE_VISUALS: Record<
 export function FaceModel({ facialExpression }: FaceModelProps) {
   const groupRef = useRef<THREE.Group>(null);
   const shellMeshesRef = useRef<HologramShellMesh[]>([]);
+  const neuroWireframeRef = useRef<THREE.Mesh | null>(null);
   const faceColorRef = useRef(new THREE.Color("#38bdf8"));
   const gl = useThree((state) => state.gl);
   const initialHeadRotationRef = useRef(new THREE.Euler(0, 0, 0));
+
+  const neuroModeEnabled = useNeuroVoiceStore((state) => state.enabled);
 
   const headMotionRef = useRef<HeadMotionState>({
     behavior: "idle",
@@ -164,16 +168,25 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
     wireframeHead.name = "neuro_wireframe_head";
     wireframeHead.scale.setScalar(1.01);
     wireframeHead.renderOrder = 30;
+    wireframeHead.visible = neuroModeEnabled;
 
     headMesh.add(wireframeHead);
+    neuroWireframeRef.current = wireframeHead;
     wireframeHead.morphTargetDictionary = headMesh.morphTargetDictionary;
     wireframeHead.morphTargetInfluences = headMesh.morphTargetInfluences;
 
     return () => {
       headMesh.remove(wireframeHead);
       wireframeMaterial.dispose();
+      neuroWireframeRef.current = null;
     };
   }, [scene]);
+
+  useEffect(() => {
+    if (!neuroWireframeRef.current) return;
+
+    neuroWireframeRef.current.visible = neuroModeEnabled;
+  }, [neuroModeEnabled]);
 
   const { state, isSpeaking, mouthOpen } = useAgentStore();
 

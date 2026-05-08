@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { useAgentStore } from "../stores/agentStore";
 import { useNeuroVoiceStore } from "../stores/neuroVoiceStore";
+import { useSpatialObjectStore } from "../stores/SpatialObjectStore";
 
 type Options = {
   enabled: boolean;
@@ -74,8 +75,8 @@ export function useAlwaysListening({
 
       modeRef.current = "idle";
       setNeuroState("idle");
-      setAgentState("idle");
-
+      console.log("getReturnStateAfterSpeaking", getReturnStateAfterSpeaking());
+      setAgentState(getReturnStateAfterSpeaking() ?? "idle");
       tick();
     }
 
@@ -115,7 +116,7 @@ export function useAlwaysListening({
         if (duration < minSpeechDurationMs) {
           modeRef.current = "idle";
           setNeuroState("idle");
-          setAgentState("idle");
+          setAgentState(getReturnStateAfterSpeaking() ?? "idle");
           return;
         }
 
@@ -129,7 +130,12 @@ export function useAlwaysListening({
 
         modeRef.current = "idle";
         setNeuroState("idle");
-        setAgentState("idle");
+        const returnStateAfterSpeaking = getReturnStateAfterSpeaking();
+        if (returnStateAfterSpeaking) {
+          setAgentState(returnStateAfterSpeaking);
+        } else {
+          setAgentState("idle");
+        }
       };
 
       recorderRef.current = recorder;
@@ -138,6 +144,15 @@ export function useAlwaysListening({
       modeRef.current = "recording";
       setNeuroState("userSpeaking");
       setAgentState("listening");
+    }
+
+    function getReturnStateAfterSpeaking() {
+      const currentObject = useSpatialObjectStore.getState().object;
+
+      if (!currentObject || currentObject.status === "error") return null;
+      if (currentObject.status === "ready") return "ready";
+
+      return "inspecting";
     }
 
     function stopRecording() {

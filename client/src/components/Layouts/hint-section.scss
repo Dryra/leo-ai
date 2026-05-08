@@ -39,6 +39,10 @@
   transition:
     opacity 220ms ease,
     transform 220ms ease;
+
+  @media (max-width: 768px) {
+    font-size: 10px;
+  }
 }
 
 .hintSectionText.isVisible {
@@ -53,6 +57,12 @@
 
 @media (max-width: 768px) {
   .hintSection {
-    bottom: 366px;
+    font-size: 12px;
+    bottom: auto;
+    top: 88px !important;
+    background: none;
+    box-shadow: none;
+    backdrop-filter: unset;
+    opacity: 0.5;
   }
 }

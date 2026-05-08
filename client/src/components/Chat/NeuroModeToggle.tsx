@@ -2,29 +2,25 @@
 import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
 import "./neuro-mode-toggle.scss";
 
-export function NeuroModeToggle() {
+export function NeuroModeToggle({ isChatVisible }: NeuroModeToggleProps) {
   const enabled = useNeuroVoiceStore((state) => state.enabled);
-  const voiceState = useNeuroVoiceStore((state) => state.state);
   const setEnabled = useNeuroVoiceStore((state) => state.setEnabled);
 
-  const label = {
-    idle: "Listening",
-    userSpeaking: "You're speaking",
-    silence: "Listening",
-    thinking: "Thinking",
-    agentSpeaking: "Agent speaking",
-  }[voiceState];
-
   return (
-    <div className="neuroMode">
+    <div
+      className={isChatVisible ? "neuroMode" : "neuroMode neuroModeCollapsed"}
+    >
       <button
         type="button"
-        className="neuroModeButton"
+        className={
+          enabled ? "neuroModeButton neuroModeButtonOn" : "neuroModeButton"
+        }
         onClick={() => setEnabled(!enabled)}
-      >
-        {enabled ? "Neuro On" : "Neuro Off"}
-      </button>
-      {enabled && <span>{label}</span>}
+      ></button>
     </div>
   );
 }
+
+type NeuroModeToggleProps = {
+  isChatVisible?: boolean;
+};

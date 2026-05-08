@@ -31,6 +31,7 @@ export function BackgroundAudioControls() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const areButtonsDisabled = true;
 
   const {
     isPlaying,
@@ -165,7 +166,15 @@ export function BackgroundAudioControls() {
 
       <button
         type="button"
-        className={`audioStyleButton ${style}`}
+        disabled={areButtonsDisabled}
+        className={`audioStyleButtonBack ${style}`}
+        onClick={cycleStyle}
+        aria-label={`Music style: ${style}`}
+      />
+      <button
+        type="button"
+        disabled={areButtonsDisabled}
+        className={`audioStyleButtonForward ${style}`}
         onClick={cycleStyle}
         aria-label={`Music style: ${style}`}
       />

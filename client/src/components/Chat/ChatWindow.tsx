@@ -7,7 +7,6 @@ import type { FacialExpressionName } from "../../constants/Expressions";
 import { ObjectDropZone } from "../SpatialObject/ObjectDropZone";
 import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
 import { playUiSound } from "../../services/uiSounds";
-import { NeuroModeToggle } from "./NeuroModeToggle";
 import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
 import { useAlwaysListening } from "../../hooks/useAlwaysLIstening";
 
@@ -153,7 +152,7 @@ export function ChatWindow({
     try {
       const result = await sendMessage(userMessage);
 
-      // Wirte the file result to the spiatial display
+      // Wirte the file result to the spatial display
       if (result.attachment) {
         displayAttachmentInWorkspace(result.attachment);
         setAfterSpeakingState("ready");
@@ -474,7 +473,6 @@ export function ChatWindow({
   return (
     <div className={["chat-window", className].filter(Boolean).join(" ")}>
       <div className="chatHeader">
-        <NeuroModeToggle />
         <h2>LEO AI</h2>
         <p>State: {state}</p>
       </div>
@@ -527,18 +525,20 @@ export function ChatWindow({
             placeholder="Ask something..."
           />
 
-          <button disabled={!canSendMessage} onClick={handleSend}>
-            Send
-          </button>
+          <button
+            disabled={!canSendMessage}
+            className="sendTextChat"
+            onClick={handleSend}
+          ></button>
+          <button
+            className={
+              isRecording ? "record-button recording" : "record-button"
+            }
+            onClick={handleVoiceClick}
+          ></button>
         </div>
       </div>
 
-      <button
-        className={isRecording ? "record-button recording" : "record-button"}
-        onClick={handleVoiceClick}
-      >
-        {isRecording ? "Stop Recording" : "Start Voice Chat"}
-      </button>
       <ObjectDropZone
         onAnalysisComplete={async (result) => {
           setReply(result.reply);

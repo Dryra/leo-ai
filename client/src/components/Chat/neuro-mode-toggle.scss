@@ -1,35 +1,65 @@
 .neuroMode {
+  position: absolute;
   left: 12px;
   top: 12px;
   z-index: 1000;
+  display: grid;
+  transition:
+    transform 260ms ease,
+    opacity 180ms ease;
+}
 
-  position: absolute;
-  .neuroModeButton {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    border: none;
-    color: #ffffff;
-    font-weight: 800;
-    cursor: pointer;
-
-    &::before {
-      content: "";
-      width: 24px;
-      height: 24px;
-      background-position: center;
-      background-repeat: no-repeat;
-      background-size: contain;
-    }
+@media (max-width: 768px) {
+  .neuroMode {
+    left: 24px;
   }
+}
 
-  .neuroModeButton {
-    border-radius: 10px;
+.neuroModeCollapsed {
+  right: 69px;
+  left: auto;
+  transition: right 220ms ease;
+}
 
-    &::before {
-      background-image: url("./assets/icons/close_fullscreen.svg");
-    }
+.neuroModeButton {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--agent-ui-color);
+  cursor: pointer;
+
+  &::before {
+    content: "";
+    display: block;
+    width: 24px;
+    height: 24px;
+    background: #ffffff;
+    mask: url("../../assets/icons/graphic_eq_on.svg") center / contain no-repeat;
+    -webkit-mask: url("../../assets/icons/graphic_eq_on.svg") center / contain
+      no-repeat;
   }
+}
+
+.neuroModeButtonOn {
+  background: #ef4444;
+  &::before {
+    content: "";
+    display: block;
+    width: 24px;
+    height: 24px;
+    background: #ffffff;
+    mask: url("../../assets/icons/graphic_eq_off.svg") center / contain
+      no-repeat;
+    -webkit-mask: url("../../assets/icons/graphic_eq_off.svg") center / contain
+      no-repeat;
+  }
+}
+
+.neuroModeButton {
+  background: var(--agent-ui-color);
+  transition: background 220ms ease;
 }

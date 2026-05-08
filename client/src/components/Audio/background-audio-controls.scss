@@ -1,7 +1,11 @@
 .backgroundAudioControls {
   position: absolute;
-  left: 24px;
-  bottom: 24px;
+  top: 90svh;
+  right: 40px;
+  transform: translateY(-50%);
+  width: min(360px, calc(100vw - 48px));
+  box-sizing: border-box;
+  justify-content: center;
   z-index: 1000;
   display: flex;
   align-items: center;
@@ -125,4 +129,36 @@
   background-color: white;
   mask: url("../../assets/icons/pause.svg") center / contain no-repeat;
   -webkit-mask: url("../../assets/icons/pause.svg") center / contain no-repeat;
+}
+
+@media (max-width: 768px) {
+  .backgroundAudioControls {
+    left: 50%;
+    top: 16px;
+    bottom: auto;
+    transform: translateX(-50%);
+    width: calc(100% - 24px);
+  }
+}
+
+.audioStyleButtonForward::before {
+  content: "";
+  display: block;
+  width: 24px;
+  height: 24px;
+  background-color: white;
+  mask: url("../../assets/icons/arrow_forward.svg") center / contain no-repeat;
+  -webkit-mask: url("../../assets/icons/arrow_forward.svg") center / contain
+    no-repeat;
+}
+
+.audioStyleButtonBack::before {
+  content: "";
+  display: block;
+  width: 24px;
+  height: 24px;
+  background-color: white;
+  mask: url("../../assets/icons/arrow_back.svg") center / contain no-repeat;
+  -webkit-mask: url("../../assets/icons/arrow_back.svg") center / contain
+    no-repeat;
 }

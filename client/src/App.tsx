@@ -10,11 +10,23 @@ import type { CSSProperties } from "react";
 import { useAgentStore } from "./stores/agentStore";
 import { STATE_VISUALS } from "./constants/stateVisuals";
 import { playUiSound } from "./services/uiSounds";
+import { NeuroModeToggle } from "./components/Chat/NeuroModeToggle";
+import { useNeuroVoiceStore } from "./stores/neuroVoiceStore";
 
 function App() {
   const [facialExpression, setFacialExpression] =
     useState<FacialExpressionName>("happy");
   const [isChatVisible, setIsChatVisible] = useState(true);
+  const voiceState = useNeuroVoiceStore((state) => state.state);
+  const neuroModeEnabled = useNeuroVoiceStore((state) => state.enabled);
+
+  const label = {
+    idle: "Standby",
+    userSpeaking: "You're speaking",
+    silence: "Listening",
+    thinking: "Thinking",
+    agentSpeaking: "Agent speaking",
+  }[voiceState];
 
   const agentState = useAgentStore((state) => state.state);
   const uiColor = STATE_VISUALS[agentState].uiColor;
@@ -35,12 +47,27 @@ function App() {
       <BackgroundAudioControls />
       <HintSection />
       <section className="panel">
-        <button
-          className={isChatVisible ? "hideChatWindow" : "showChatWindow"}
-          type="button"
-          onClick={toggleChatWindow}
-          aria-label={isChatVisible ? "Hide chat window" : "Show chat window"}
-        />
+        <div className="actionButtonContainer">
+          {neuroModeEnabled && (
+            <span
+              className={
+                isChatVisible
+                  ? `neuroModeStatus ${voiceState}`
+                  : `neuroModeStatus neuroModeStatusCollapsed ${voiceState}`
+              }
+            >
+              {isChatVisible ? label : ""}
+            </span>
+          )}
+          <NeuroModeToggle isChatVisible={isChatVisible} />
+          <button
+            className={isChatVisible ? "hideChatWindow" : "showChatWindow"}
+            type="button"
+            onClick={toggleChatWindow}
+            aria-label={isChatVisible ? "Hide chat window" : "Show chat window"}
+          />
+        </div>
+
         <ChatWindow
           className={isChatVisible ? "is-visible" : "is-hidden"}
           setFacialExpression={setFacialExpression}
