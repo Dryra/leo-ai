@@ -30,6 +30,7 @@ export function BackgroundAudioControls() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const gainRef = useRef<GainNode | null>(null);
   const dataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const areButtonsDisabled = true;
 
@@ -55,12 +56,16 @@ export function BackgroundAudioControls() {
     const audioContext = new AudioContext();
     audioContextRef.current = audioContext;
     const source = audioContext.createMediaElementSource(audio);
+    const gain = audioContext.createGain();
     const analyser = audioContext.createAnalyser();
 
+    gain.gain.value = volume;
     analyser.fftSize = 256;
-    source.connect(analyser);
+    source.connect(gain);
+    gain.connect(analyser);
     analyser.connect(audioContext.destination);
 
+    gainRef.current = gain;
     analyserRef.current = analyser;
     dataRef.current = new Uint8Array(analyser.frequencyBinCount);
 
@@ -92,6 +97,7 @@ export function BackgroundAudioControls() {
       audio.src = "";
       audioContext.close();
       audioContextRef.current = null;
+      gainRef.current = null;
     };
   }, [setAudioAnalysis]);
 
@@ -100,6 +106,13 @@ export function BackgroundAudioControls() {
 
     audioRef.current.volume = volume;
     audioRef.current.muted = isMuted;
+
+    const audioContext = audioContextRef.current;
+    const gain = gainRef.current;
+
+    if (!gain || !audioContext) return;
+
+    gain.gain.setTargetAtTime(isMuted ? 0 : volume, audioContext.currentTime, 0.02);
   }, [volume, isMuted]);
 
   async function togglePlay() {
@@ -151,7 +164,8 @@ export function BackgroundAudioControls() {
         max="1"
         step="0.01"
         value={volume}
-        onChange={(event) => setVolume(Number(event.target.value))}
+        onInput={(event) => setVolume(Number(event.currentTarget.value))}
+        onChange={(event) => setVolume(Number(event.currentTarget.value))}
         aria-label="Background music volume"
       />
 

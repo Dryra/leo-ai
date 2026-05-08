@@ -9,7 +9,6 @@ import { HintSection } from "./components/Layouts/HintSection";
 import type { CSSProperties } from "react";
 import { useAgentStore } from "./stores/agentStore";
 import { STATE_VISUALS } from "./constants/stateVisuals";
-import { playUiSound } from "./services/uiSounds";
 import { NeuroModeToggle } from "./components/Chat/NeuroModeToggle";
 import { useNeuroVoiceStore } from "./stores/neuroVoiceStore";
 
@@ -32,7 +31,8 @@ function App() {
   const uiColor = STATE_VISUALS[agentState].uiColor;
 
   function toggleChatWindow() {
-    playUiSound("click");
+    // TODO: Reimplement when
+    //playUiSound("click");
     setIsChatVisible((visible) => !visible);
   }
 

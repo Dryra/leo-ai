@@ -197,6 +197,14 @@
 }
 
 @media (max-width: 768px) {
+  .neuroModeStatusCollapsed {
+    right: 74px !important;
+    top: 18px !important;
+    transform: translateY(266px);
+  }
+}
+
+@media (max-width: 768px) {
   .hideChatWindow,
   .showChatWindow {
     right: 24px;
