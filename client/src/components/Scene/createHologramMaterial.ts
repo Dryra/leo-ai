@@ -14,6 +14,8 @@ export function createHologramMaterial(color = "#a803c5") {
       uFresnelPower: { value: 2.2 },
       uScanlineStrength: { value: 0.18 },
       uGlowStrength: { value: 1.8 },
+      uRevealProgress: { value: 0 },
+      uGlobalOpacity: { value: 1 },
     },
 
     vertexShader: `
@@ -49,12 +51,22 @@ export function createHologramMaterial(color = "#a803c5") {
       uniform float uFresnelPower;
       uniform float uScanlineStrength;
       uniform float uGlowStrength;
+      uniform float uRevealProgress;
+      uniform float uGlobalOpacity;
 
       varying vec3 vNormal;
       varying vec3 vWorldPosition;
       varying vec2 vUv;
 
       void main() {
+        float revealLine = mix(-2.2, 2.2, uRevealProgress);
+        float revealMask = smoothstep(revealLine - 0.22, revealLine + 0.08, vWorldPosition.y);
+        float revealEdge = 1.0 - smoothstep(0.0, 0.16, abs(vWorldPosition.y - revealLine));
+
+        if (uRevealProgress < 0.98 && revealMask < 0.03) {
+          discard;
+        }
+
         vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
 
         float fresnel = pow(1.0 - max(dot(viewDirection, normalize(vNormal)), 0.0), uFresnelPower);
@@ -64,10 +76,12 @@ export function createHologramMaterial(color = "#a803c5") {
 
         float pulse = 0.85 + sin(uTime * 2.0) * 0.15;
 
-        float alpha = uOpacity + fresnel * 0.45 + scanline;
+        float alpha = uOpacity + fresnel * 0.45 + scanline + revealEdge * 0.35;
         alpha = clamp(alpha, 0.05, 0.75);
 
-        vec3 color = uColor * (uGlowStrength * fresnel + pulse + scanline);
+        alpha *= uGlobalOpacity;
+
+        vec3 color = uColor * (uGlowStrength * fresnel + pulse + scanline + revealEdge * 3.0) * uGlobalOpacity;
 
         gl_FragColor = vec4(color, alpha);
       }

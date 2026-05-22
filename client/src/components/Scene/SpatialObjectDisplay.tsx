@@ -4,14 +4,14 @@ import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
 import { useAgentStore } from "../../stores/agentStore";
 
 import { useFrame } from "@react-three/fiber";
-import { Suspense, useRef } from "react";
-import type { Group } from "three";
+import { Suspense, useRef, useState } from "react";
+import { MathUtils, Vector3, type Group } from "three";
 
 function ImageObject({ url }: { url: string }) {
   const texture = useTexture(url);
 
   return (
-    <mesh position={[0, -1.15, 0.45]} rotation={[-0.35, 0, 0]}>
+    <mesh>
       <planeGeometry args={[2.2, 1.35]} />
       <meshBasicMaterial map={texture} transparent />
     </mesh>
@@ -22,21 +22,61 @@ export function SpatialObjectDisplay() {
   const object = useSpatialObjectStore((state) => state.object);
   const isSpeaking = useAgentStore((state) => state.isSpeaking);
   const { state } = useAgentStore();
+  const groupRef = useRef<Group>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
+
+  useFrame(() => {
+    if (
+      !groupRef.current ||
+      !object ||
+      isSpeaking ||
+      state === "listening" ||
+      state === "thinking"
+    )
+      return;
+
+    const targetPosition = isZoomed
+      ? new Vector3(0, -0.25, 1.6)
+      : new Vector3(0, -1.15, 0.45);
+    const targetScale = isZoomed ? 1.65 : 1;
+    const targetRotationX = isZoomed ? -0.08 : -0.35;
+
+    groupRef.current.position.lerp(targetPosition, 0.1);
+    groupRef.current.scale.setScalar(
+      MathUtils.lerp(groupRef.current.scale.x, targetScale, 0.1),
+    );
+    groupRef.current.rotation.x = MathUtils.lerp(
+      groupRef.current.rotation.x,
+      targetRotationX,
+      0.1,
+    );
+  });
 
   if (!object || isSpeaking || state === "listening" || state === "thinking")
     return null;
 
-  if (object.kind === "image" && object.previewUrl) {
-    return <ImageObject url={object.previewUrl} />;
-  }
-
   return (
-    <group position={[0, -1.15, 0.45]} rotation={[-0.35, 0, 0]}>
-      <Suspense fallback={null}>
-        <ModelObject />
-      </Suspense>
+    <group ref={groupRef} position={[0, -1.15, 0.45]} rotation={[-0.35, 0, 0]}>
+      <mesh
+        position={[0, 0, 0.02]}
+        onClick={(event) => {
+          event.stopPropagation();
+          setIsZoomed((zoomed) => !zoomed);
+        }}
+      >
+        <planeGeometry args={[2.5, 1.65]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
 
-      <Html center transform>
+      {object.kind === "image" && object.previewUrl ? (
+        <ImageObject url={object.previewUrl} />
+      ) : (
+        <Suspense fallback={null}>
+          <ModelObject />
+        </Suspense>
+      )}
+
+      <Html center transform position={[0, -1.05, 0]}>
         <div className="spatialObjectCard">
           <span>{object.fileName}</span>
         </div>

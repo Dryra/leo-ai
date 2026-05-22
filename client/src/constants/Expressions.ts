@@ -5,7 +5,8 @@ export type FacialExpressionName =
   | "angry"
   | "bored"
   | "listening"
-  | "thinking";
+  | "thinking"
+  | "confused";
 
 export const FACIAL_EXPRESSIONS: Record<
   FacialExpressionName,
@@ -54,17 +55,29 @@ export const FACIAL_EXPRESSIONS: Record<
     browInnerUp: 0.85,
     eyeWide_L: 0.85,
     eyeWide_R: 0.85,
-    mouthSmile_L: 0.65,
-    mouthSmile_R: 0.65,
+    mouthSmile_L: 0.85,
+    mouthSmile_R: 0.85,
   },
 
   thinking: {
+    browDown_L: 0.95,
+    browDown_R: 0.72,
+    browInnerUp: 0.35,
+    browOuterUp_R: 0.28,
+    eyeLookUp_L: 0.9,
+    eyeLookUp_R: 0.9,
+    eyeSquint_L: 0.28,
+    eyeSquint_R: 0.22,
+    mouthPress_L: 0.95,
+    mouthPress_R: 0.85,
+    mouthFrown_L: 0.18,
+    mouthFrown_R: 0.12,
+  },
+
+  confused: {
     browDown_L: 0.85,
     browDown_R: 0.85,
-    eyeLookUp_L: 0.6,
-    eyeLookUp_R: 0.6,
-    mouthPress_L: 0.85,
-    mouthPress_R: 0.85,
+    mouthFrownR: 0.85,
   },
 };
 

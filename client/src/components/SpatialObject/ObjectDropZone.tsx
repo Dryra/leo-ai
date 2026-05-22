@@ -26,6 +26,7 @@ type ObjectAnalysisResult = {
 
 type ObjectDropZoneProps = {
   onAnalysisComplete?: (result: ObjectAnalysisResult) => void | Promise<void>;
+  demoToken?: string | null;
 };
 
 function getKind(file: File): SpatialObjectKind {
@@ -34,7 +35,10 @@ function getKind(file: File): SpatialObjectKind {
   return "text";
 }
 
-export function ObjectDropZone({ onAnalysisComplete }: ObjectDropZoneProps) {
+export function ObjectDropZone({
+  onAnalysisComplete,
+  demoToken,
+}: ObjectDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const { setState } = useAgentStore();
   const { object, setObject, patchObject } = useSpatialObjectStore();
@@ -73,7 +77,11 @@ export function ObjectDropZone({ onAnalysisComplete }: ObjectDropZoneProps) {
       patchObject({ status: "thinking" });
       //setState("thinking");
 
-      const result = await uploadObject(file, abortController.signal);
+      const result = await uploadObject(
+        file,
+        abortController.signal,
+        demoToken,
+      );
 
       if (uploadRun !== uploadRunRef.current) return;
 

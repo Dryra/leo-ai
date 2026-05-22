@@ -3,7 +3,11 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { KTX2Loader, type GLTFLoader } from "three-stdlib";
-import { useAgentStore, type AgentState } from "../../stores/agentStore";
+import {
+  useAgentStore,
+  type AgentAttentionTarget,
+  type AgentState,
+} from "../../stores/agentStore";
 import { isMorphMesh, setMorphTarget } from "./morphTargets";
 import type { MorphMesh } from "./morphTargets";
 import {
@@ -15,6 +19,22 @@ import {
 import { createHologramMaterial } from "./createHologramMaterial";
 import { AIBrain } from "./AIBrain";
 import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
+
+const ATTENTION_ROTATIONS: Record<
+  AgentAttentionTarget,
+  { x: number; y: number; z: number }
+> = {
+  none: { x: 0, y: 0, z: 0 },
+
+  // If chat window is on screen-right, avatar's left is usually positive y or negative y
+  // depending on your model orientation. Try one, flip if needed.
+  chatInput: { x: 0.08, y: 0.42, z: 0.06 },
+  sendButton: { x: 0.1, y: 0.48, z: 0.04 },
+  voiceButton: { x: 0.16, y: 0.45, z: 0.08 },
+  chatPanel: { x: 0.08, y: 0.38, z: 0.04 },
+
+  spatialObject: { x: 0.2, y: -0.35, z: -0.03 },
+};
 
 type FaceModelProps = {
   facialExpression: FacialExpressionName;
@@ -99,6 +119,7 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
   const shellMeshesRef = useRef<HologramShellMesh[]>([]);
   const neuroWireframeRef = useRef<THREE.Mesh | null>(null);
   const faceColorRef = useRef(new THREE.Color("#38bdf8"));
+  const revealStartedAtRef = useRef<number | null>(null);
   const gl = useThree((state) => state.gl);
   const initialHeadRotationRef = useRef(new THREE.Euler(0, 0, 0));
 
@@ -127,10 +148,10 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
 
   const { scene } = useGLTF("/models/facecap.glb", true, true, extendLoader);
 
-  //const purpleMaterial = useMemo(() => createHologramMaterial("#a803c5"), []);
+  // Currently just used for the eyes
   const blueMaterial = useMemo(() => createHologramMaterial("#38bdf8"), []);
-  //const yellowMaterial = useMemo(() => createHologramMaterial("#facc15"), []);
-  //const redMaterial = useMemo(() => createHologramMaterial("#d00819"), []);
+
+  const winkStartedAtRef = useRef<number | null>(null);
 
   const { allMeshes, morphMeshes } = useMemo(() => {
     const morphMeshes: MorphMesh[] = [];
@@ -144,6 +165,7 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         allMeshes.push(object as THREE.Mesh);
       }
       if (isMorphMesh(object)) {
+        console.log("morph mesh", object);
         morphMeshes.push(object);
       }
     });
@@ -188,7 +210,14 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
     neuroWireframeRef.current.visible = neuroModeEnabled;
   }, [neuroModeEnabled]);
 
-  const { state, isSpeaking, mouthOpen } = useAgentStore();
+  const {
+    state,
+    isSpeaking,
+    mouthOpen,
+    gesture,
+    clearGesture,
+    attentionTarget,
+  } = useAgentStore();
 
   useEffect(() => {
     allMeshes.forEach((mesh) => {
@@ -199,7 +228,6 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         case "mesh_1":
           mesh.material = blueMaterial;
           break;
-
         default:
           break;
       }
@@ -207,8 +235,41 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
       //console.log("Morph targets:", mesh.morphTargetDictionary);
     });
 
-    return () => {};
-  }, [allMeshes, morphMeshes]);
+    const shellMeshes = morphMeshes
+      .filter((mesh) => mesh.name !== "mesh_0" && mesh.name !== "mesh_1")
+      .map((mesh) => {
+        const material = createHologramMaterial("#38bdf8");
+        material.depthTest = false;
+        material.uniforms.uOpacity.value = 0.55;
+
+        const shell = new THREE.Mesh(
+          mesh.geometry,
+          material,
+        ) as unknown as HologramShellMesh;
+
+        shell.name = `${mesh.name}_hologram_shell`;
+        shell.renderOrder = 20;
+        shell.scale.setScalar(1.012);
+        shell.morphTargetDictionary = mesh.morphTargetDictionary;
+        shell.morphTargetInfluences = [...mesh.morphTargetInfluences];
+        shell.userData.sourceMesh = mesh;
+
+        mesh.add(shell);
+
+        return shell;
+      });
+
+    shellMeshesRef.current = shellMeshes;
+
+    return () => {
+      shellMeshes.forEach((shell) => {
+        shell.parent?.remove(shell);
+        (shell.material as THREE.Material).dispose();
+      });
+
+      shellMeshesRef.current = [];
+    };
+  }, [allMeshes, blueMaterial, morphMeshes]);
 
   const applyFacialExpression = (
     expressionName: FacialExpressionName,
@@ -246,6 +307,13 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
 
   useFrame(({ clock }) => {
     const time = clock.getElapsedTime();
+    if (revealStartedAtRef.current === null) {
+      revealStartedAtRef.current = time;
+    }
+
+    const revealElapsed = time - revealStartedAtRef.current;
+    const revealProgress = THREE.MathUtils.smoothstep(revealElapsed, 0.15, 2.2);
+    const shellFadeOut = 1 - THREE.MathUtils.smoothstep(revealElapsed, 2.0, 2.9);
     const faceVisual = FACE_STATE_VISUALS[state];
     const faceTargetColor = new THREE.Color(faceVisual.color);
     const speechBlink = state === "speaking" ? mouthOpen * 0.45 : 0;
@@ -268,9 +336,16 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
       faceVisual.scanline,
       0.08,
     );
+    blueMaterial.uniforms.uRevealProgress.value = revealProgress;
+    blueMaterial.uniforms.uGlobalOpacity.value = 1;
 
     shellMeshesRef.current.forEach((shell) => {
       const material = shell.material as THREE.ShaderMaterial;
+      const isRevealComplete = shellFadeOut <= 0.01;
+
+      shell.visible = !isRevealComplete;
+
+      if (isRevealComplete) return;
 
       material.uniforms.uTime.value = time;
       material.uniforms.uColor.value.copy(faceColorRef.current);
@@ -289,6 +364,8 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         faceVisual.scanline,
         0.08,
       );
+      material.uniforms.uRevealProgress.value = revealProgress;
+      material.uniforms.uGlobalOpacity.value = shellFadeOut;
 
       shell.morphTargetInfluences.forEach((_, index) => {
         shell.morphTargetInfluences[index] =
@@ -299,6 +376,32 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
     const mouthMovement = isSpeaking ? mouthOpen * 0.55 : 0;
 
     const blink = Math.sin(time * 1.5) > 0.97 ? 1 : 0;
+
+    if (gesture === "wink" && winkStartedAtRef.current === null) {
+      winkStartedAtRef.current = time;
+    }
+
+    let winkAmount = 0;
+    let winkTiltZ = 0;
+    let winkForwardX = 0;
+
+    if (winkStartedAtRef.current !== null) {
+      const winkTime = time - winkStartedAtRef.current;
+      const duration = 1.1;
+      const progress = THREE.MathUtils.clamp(winkTime / duration, 0, 1);
+
+      // Opens and closes smoothly.
+      winkAmount = Math.sin(progress * Math.PI);
+
+      // Head tilts slightly and nods forward.
+      winkTiltZ = winkAmount * -0.18;
+      winkForwardX = winkAmount * 0.1;
+
+      if (progress >= 1) {
+        winkStartedAtRef.current = null;
+        clearGesture();
+      }
+    }
 
     const pickHeadBehavior = (time: number, isSpeakingNow: boolean) => {
       if (!groupRef.current) return;
@@ -323,11 +426,11 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         : normalBehaviors[Math.floor(Math.random() * normalBehaviors.length)];
 
       const expressionByBehavior: Record<HeadBehavior, FacialExpressionName> = {
-        idle: "neutral",
+        idle: "happy",
         lookLeft: "happy",
         lookRight: "happy",
         lookUp: "thinking",
-        lookDown: "thinking",
+        lookDown: "happy",
         curiousTilt: "happy",
         scanRoom: "happy",
         spin360: "happy",
@@ -349,8 +452,10 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
           break;
 
         case "lookUp":
-          to.x = -0.22;
-          to.y = THREE.MathUtils.randFloat(-0.18, 0.18);
+          to.x = THREE.MathUtils.randFloat(-0.24, -0.16);
+          to.y = THREE.MathUtils.randFloat(-0.28, 0.28);
+          to.z = Math.random() > 0.5 ? 0.16 : -0.16;
+          duration = THREE.MathUtils.randFloat(2.6, 4.2);
           break;
 
         case "lookDown":
@@ -419,12 +524,30 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
       const stateZ = state === "listening" ? 0.12 : 0;
 
       // INSPECTING
-      const inspectingX =
-        state === "inspecting" || state === "ready" ? 0.32 : 0;
+      const isInspectingObject = state === "inspecting" || state === "ready";
+      const inspectingIntensity =
+        state === "inspecting" ? 1 : state === "ready" ? 0.45 : 0;
+      const inspectingSweep = Math.sin(time * 0.85) * inspectingIntensity;
+      const inspectingFocusPulse =
+        Math.sin(time * 1.7 + 0.6) * inspectingIntensity;
+      const inspectingX = isInspectingObject
+        ? 0.34 + inspectingFocusPulse * 0.045
+        : 0;
+      const inspectingY = inspectingSweep * 0.38;
+      const inspectingZ =
+        isInspectingObject
+          ? -0.08 + Math.sin(time * 1.05) * 0.09 * inspectingIntensity
+          : 0;
 
       let gestureX = 0;
       let gestureY = 0;
       let gestureZ = 0;
+
+      const attentionRotation = ATTENTION_ROTATIONS[attentionTarget];
+
+      const attentionX = attentionRotation.x;
+      const attentionY = attentionRotation.y;
+      const attentionZ = attentionRotation.z;
 
       if (canUseGeneralHeadMotion) {
         const motion = headMotionRef.current;
@@ -439,14 +562,32 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         gestureX = THREE.MathUtils.lerp(motion.from.x, motion.to.x, eased);
         gestureY = THREE.MathUtils.lerp(motion.from.y, motion.to.y, eased);
         gestureZ = THREE.MathUtils.lerp(motion.from.z, motion.to.z, eased);
+
+        if (motion.behavior === "lookUp") {
+          const ponderAmount = Math.sin(progress * Math.PI);
+
+          gestureX += Math.sin(time * 1.4) * 0.018 * ponderAmount;
+          gestureY += Math.sin(time * 1.7) * 0.032 * ponderAmount;
+          gestureZ += Math.sin(time * 1.2) * 0.024 * ponderAmount;
+        }
       }
 
       // POSITIONING
-      const targetPositionY =
-        state === "inspecting" || state === "ready" ? 2 : 0;
+      const targetPositionX = isInspectingObject
+        ? inspectingSweep * 0.28
+        : 0;
 
-      const targetPositionZ =
-        state === "inspecting" || state === "ready" ? -2 : 0;
+      const targetPositionY = isInspectingObject ? 1.85 : 0;
+
+      const targetPositionZ = isInspectingObject
+        ? -2.2 + inspectingFocusPulse * 0.16
+        : 0;
+
+      groupRef.current.position.x = THREE.MathUtils.lerp(
+        groupRef.current.position.x,
+        targetPositionX,
+        0.08,
+      );
 
       groupRef.current.position.y = THREE.MathUtils.lerp(
         groupRef.current.position.y,
@@ -468,13 +609,27 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         gestureX +
         idleX +
         speechX +
-        listeningNodX;
+        listeningNodX +
+        winkForwardX +
+        attentionX;
 
       const targetRotationY =
-        initialHeadRotationRef.current.y + stateY + gestureY + idleY;
+        initialHeadRotationRef.current.y +
+        stateY +
+        inspectingY +
+        gestureY +
+        idleY +
+        attentionY;
 
       const targetRotationZ =
-        initialHeadRotationRef.current.z + stateZ + gestureZ + idleZ + speechZ;
+        initialHeadRotationRef.current.z +
+        stateZ +
+        inspectingZ +
+        gestureZ +
+        idleZ +
+        speechZ +
+        winkTiltZ +
+        attentionZ;
 
       groupRef.current.rotation.x = THREE.MathUtils.lerp(
         groupRef.current.rotation.x,
@@ -519,10 +674,15 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         0.2,
       );
 
-      setMorphTarget(mesh, "browInnerUp", mouthMovement, 0.35);
-
-      setMorphTarget(mesh, "eyeBlink_L", blink, 0.5);
+      setMorphTarget(mesh, "eyeBlink_L", Math.max(blink, winkAmount), 0.5);
       setMorphTarget(mesh, "eyeBlink_R", blink, 0.5);
+
+      setMorphTarget(mesh, "mouthSmile_L", winkAmount * 0.55, 0.25);
+      setMorphTarget(mesh, "mouthSmile_R", winkAmount * 0.75, 0.25);
+      setMorphTarget(mesh, "cheekSquint_L", winkAmount * 0.35, 0.25);
+      setMorphTarget(mesh, "cheekSquint_R", winkAmount * 0.25, 0.25);
+
+      setMorphTarget(mesh, "browInnerUp", mouthMovement, 0.35);
     });
   });
 

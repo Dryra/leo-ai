@@ -111,6 +111,8 @@ export function useAlwaysListening({
       };
 
       recorder.onstop = async () => {
+        if (cancelled) return;
+
         const duration = performance.now() - startedAtRef.current;
 
         if (duration < minSpeechDurationMs) {

@@ -4,6 +4,7 @@ import cors from "cors";
 import aiRoutes from "./routes/ai.routes";
 
 const app = express();
+const DEMO_TOKEN = process.env.DEMO_TOKEN;
 
 const allowedOrigins = [
   "http://localhost:5173",

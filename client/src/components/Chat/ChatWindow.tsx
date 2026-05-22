@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sendMessage, sendVoiceMessage } from "../../services/api";
+import {
+  DemoAccessError,
+  sendMessage,
+  sendVoiceMessage,
+} from "../../services/api";
+import type { ContactLinks } from "../../services/api";
 import { base64ToAudioUrl, playAudioWithVolume } from "../../services/audio";
-import { useAgentStore } from "../../stores/agentStore";
+import {
+  useAgentStore,
+  type AgentAttentionTarget,
+} from "../../stores/agentStore";
 import { useVoiceRecorder } from "../../hooks/useVoiceRecorder";
 import type { FacialExpressionName } from "../../constants/Expressions";
 import { ObjectDropZone } from "../SpatialObject/ObjectDropZone";
@@ -15,6 +23,7 @@ type ChatMessage = {
   content: string;
   createdAt: number;
   attachment?: ChatAttachment;
+  contact?: ContactLinks;
   isPending?: boolean;
 };
 
@@ -22,6 +31,11 @@ type ChatAttachment = {
   fileName: string;
   mimeType: string;
   data: string; // base64
+};
+
+type ChatError = {
+  message: string;
+  contact?: ContactLinks;
 };
 
 // Format the timing
@@ -55,7 +69,7 @@ export function ChatWindow({
 }: ChatWindowProps) {
   const [, setTranscript] = useState("");
   const [, setReply] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ChatError | null>(null);
   const [loading, setLoading] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [now, setNow] = useState(Date.now());
@@ -65,6 +79,12 @@ export function ChatWindow({
   const setSpeaking = useAgentStore((store) => store.setSpeaking);
   const setEmotion = useAgentStore((store) => store.setEmotion);
   const setMouthOpen = useAgentStore((store) => store.setMouthOpen);
+  const triggerGesture = useAgentStore((store) => store.triggerGesture);
+  const setAttentionTarget = useAgentStore((store) => store.setAttentionTarget);
+  const clearAttentionTarget = useAgentStore(
+    (store) => store.clearAttentionTarget,
+  );
+
   const setAfterSpeakingState = useAgentStore(
     (store) => store.setAfterSpeakingState,
   );
@@ -83,6 +103,10 @@ export function ChatWindow({
   const neuroEnabled = useNeuroVoiceStore((state) => state.enabled);
   const setNeuroState = useNeuroVoiceStore((state) => state.setState);
 
+  const [demoToken, setDemoToken] = useState<string | null>(null);
+
+  const attentionTimeoutRef = useRef<number | null>(null);
+
   const handleNeuroUtterance = useCallback(
     async (audioBlob: Blob) => {
       await processVoiceMessage(audioBlob);
@@ -91,7 +115,7 @@ export function ChatWindow({
   );
 
   useAlwaysListening({
-    enabled: neuroEnabled && !isRecording && state !== "speaking",
+    enabled: neuroEnabled && !isRecording && !loading,
     onUtterance: handleNeuroUtterance,
   });
 
@@ -109,6 +133,36 @@ export function ChatWindow({
 
     return () => cancelAnimationFrame(frame);
   }, [chatMessages, loading]);
+
+  useEffect(() => {
+    if (error) {
+      const createdAt = Date.now();
+      setFacialExpression("sad");
+
+      setChatMessages((messages) => [
+        ...messages,
+        {
+          id: crypto.randomUUID(),
+          role: "agent",
+          content: error.message,
+          createdAt,
+          contact: error.contact,
+          isPending: false,
+        },
+      ]);
+    }
+  }, [error]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+
+    if (token) {
+      setDemoToken(token);
+      // clean up url
+      window.history.replaceState({}, document.title, "/");
+    }
+  }, []);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -149,7 +203,7 @@ export function ChatWindow({
     setLoading(true);
 
     try {
-      const result = await sendMessage(userMessage);
+      const result = await sendMessage(userMessage, demoToken);
 
       // Wirte the file result to the spatial display
       if (result.attachment) {
@@ -162,6 +216,9 @@ export function ChatWindow({
       setReply(result.text);
       setEmotion(result.emotion);
       setFacialExpression(result.emotion);
+      if (result.gesture !== "none") {
+        triggerGesture(result.gesture);
+      }
       setChatMessages((messages) =>
         messages.map((chatMessage) =>
           chatMessage.id === pendingAgentMessageId
@@ -187,7 +244,7 @@ export function ChatWindow({
       URL.revokeObjectURL(audioUrl);
     } catch (err) {
       console.error(err);
-      setError("Something went wrong with the text request.");
+      setError(getRequestError(err));
       setChatMessages((messages) =>
         messages.filter(
           (chatMessage) => chatMessage.id !== pendingAgentMessageId,
@@ -273,7 +330,7 @@ export function ChatWindow({
     ]);
 
     try {
-      const result = await sendVoiceMessage(audioBlob);
+      const result = await sendVoiceMessage(audioBlob, demoToken);
 
       if (result.attachment) {
         displayAttachmentInWorkspace(result.attachment);
@@ -287,6 +344,9 @@ export function ChatWindow({
       setReply(result.reply);
       setEmotion(result.emotion);
       setFacialExpression(result.emotion);
+      if (result.gesture !== "none") {
+        triggerGesture(result.gesture);
+      }
       setChatMessages((messages) =>
         messages.map((chatMessage) => {
           if (chatMessage.id === pendingUserMessageId) {
@@ -342,7 +402,7 @@ export function ChatWindow({
   }
 
   async function handleVoiceClick() {
-    setError("");
+    setError(null);
 
     try {
       if (!isRecording) {
@@ -359,7 +419,7 @@ export function ChatWindow({
       await processVoiceMessage(audioBlob);
     } catch (err) {
       console.error(err);
-      setError("Something went wrong with the voice request.");
+      setError(getRequestError(err));
       setSpeaking(false);
       setState("idle");
     }
@@ -384,7 +444,7 @@ export function ChatWindow({
 
       isHoldingSpaceRef.current = true;
       hasSpaceRecordingStartedRef.current = false;
-      setError("");
+      setError(null);
 
       spaceHoldTimeoutRef.current = setTimeout(async () => {
         if (!isHoldingSpaceRef.current || isProcessingVoiceRef.current) return;
@@ -413,7 +473,7 @@ export function ChatWindow({
           isStartingSpaceRecordingRef.current = false;
           isProcessingVoiceRef.current = false;
           hasSpaceRecordingStartedRef.current = false;
-          setError("Could not start recording.");
+          setError({ message: "Could not start recording." });
           setState("idle");
         }
       }, 1000);
@@ -446,7 +506,7 @@ export function ChatWindow({
         await processVoiceMessage(audioBlob);
       } catch (err) {
         console.error(err);
-        setError("Something went wrong with the voice request.");
+        setError(getRequestError(err));
         setSpeaking(false);
         setMouthOpen(0);
         setState("idle");
@@ -475,6 +535,18 @@ export function ChatWindow({
     setMouthOpen,
     setFacialExpression,
   ]);
+
+  function nudgeAttention(target: AgentAttentionTarget) {
+    setAttentionTarget(target);
+
+    if (attentionTimeoutRef.current !== null) {
+      window.clearTimeout(attentionTimeoutRef.current);
+    }
+
+    attentionTimeoutRef.current = window.setTimeout(() => {
+      clearAttentionTarget();
+    }, 1200);
+  }
 
   return (
     <div className={["chat-window", className].filter(Boolean).join(" ")}>
@@ -509,19 +581,26 @@ export function ChatWindow({
               {chatMessage.attachment && (
                 <ChatAttachmentLink attachment={chatMessage.attachment} />
               )}
+              {chatMessage.contact && (
+                <ContactActions contact={chatMessage.contact} />
+              )}
             </div>
           </div>
         ))}
       </div>
 
-      {error && <p className="error">{error}</p>}
-
       <div className="bottom-row">
         <div className="input-row">
           <input
             name="chat"
+            onFocus={() => setAttentionTarget("chatInput")}
             value={message}
-            onChange={(e) => setMessage(e.target.value)}
+            onChange={(e) => {
+              setMessage(e.target.value);
+              setAttentionTarget("chatInput");
+              nudgeAttention("chatInput");
+            }}
+            onBlur={() => clearAttentionTarget()}
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
 
@@ -534,13 +613,23 @@ export function ChatWindow({
           <button
             disabled={!canSendMessage}
             className="sendTextChat"
-            onClick={handleSend}
+            onMouseEnter={() => setAttentionTarget("sendButton")}
+            onClick={() => {
+              setAttentionTarget("sendButton");
+              nudgeAttention("sendButton");
+
+              void handleSend();
+            }}
           ></button>
           <button
             className={
               isRecording ? "record-button recording" : "record-button"
             }
-            onClick={handleVoiceClick}
+            onClick={() => {
+              setAttentionTarget("voiceButton");
+              nudgeAttention("voiceButton");
+              void handleVoiceClick();
+            }}
           ></button>
         </div>
       </div>
@@ -572,8 +661,63 @@ export function ChatWindow({
           setSpeaking(false);
           URL.revokeObjectURL(audioUrl);
         }}
+        demoToken={demoToken}
       />
     </div>
+  );
+}
+
+function getRequestError(error: unknown): ChatError {
+  if (error instanceof DemoAccessError) {
+    return {
+      message: error.message,
+      contact: error.contact,
+    };
+  }
+
+  if (
+    error &&
+    typeof error === "object" &&
+    "response" in error &&
+    error.response &&
+    typeof error.response === "object" &&
+    "data" in error.response &&
+    error.response.data &&
+    typeof error.response.data === "object" &&
+    "error" in error.response.data &&
+    typeof error.response.data.error === "string"
+  ) {
+    const contact =
+      "contact" in error.response.data &&
+      isContactLinks(error.response.data.contact)
+        ? error.response.data.contact
+        : undefined;
+
+    return {
+      message: error.response.data.error,
+      contact,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+    };
+  }
+
+  return {
+    message: "Something went wrong with the text request.",
+  };
+}
+
+function isContactLinks(value: unknown): value is ContactLinks {
+  if (!value || typeof value !== "object") return false;
+
+  const contact = value as Partial<ContactLinks>;
+
+  return (
+    typeof contact.email === "string" &&
+    (!contact.linkedinUrl || typeof contact.linkedinUrl === "string")
   );
 }
 
@@ -591,6 +735,19 @@ function ChatAttachmentLink({ attachment }: { attachment: ChatAttachment }) {
     <a className="chatAttachment" href={url} download={attachment.fileName}>
       Download {attachment.fileName}
     </a>
+  );
+}
+
+function ContactActions({ contact }: { contact: ContactLinks }) {
+  return (
+    <div className="contactActions">
+      <a href={`mailto:${contact.email}`}>Email</a>
+      {contact.linkedinUrl && (
+        <a href={contact.linkedinUrl} target="_blank" rel="noreferrer">
+          LinkedIn
+        </a>
+      )}
+    </div>
   );
 }
 
