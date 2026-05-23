@@ -1,0 +1,76 @@
+.workspaceNavigation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem;
+
+  z-index: 1000;
+  top: 20px;
+  align-self: center;
+  margin-bottom: 10px;
+}
+
+.workspaceNavigationButton {
+  position: relative;
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid rgba(125, 211, 252, 0.28);
+  border-radius: 12px;
+  color: #dffaff;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+.workspaceNavigationButton:hover {
+  border-color: rgba(255, 255, 255, 0.8);
+  box-shadow:
+    0 0 16px rgba(255, 255, 255, 0.32),
+    inset 0 0 14px rgba(56, 232, 255, 0.12);
+  transform: translateY(-1px);
+}
+
+.workspaceNavigationButton:disabled {
+  border-color: rgba(148, 163, 184, 0.18);
+  color: rgba(226, 232, 240, 0.38);
+  cursor: not-allowed;
+  opacity: 0.48;
+  box-shadow: none;
+  transform: none;
+}
+
+.workspaceNavigationButton:disabled:hover {
+  border-color: rgba(148, 163, 184, 0.18);
+  box-shadow: none;
+  transform: none;
+}
+
+.workspaceNavigationButton:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.workspaceNavigationButton:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.95);
+  outline-offset: 3px;
+}
+
+.workspaceNavigationArrow {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-block-start: 2px solid currentColor;
+  border-inline-start: 2px solid currentColor;
+}
+
+.workspaceNavigationButton[data-direction="previous"]
+  .workspaceNavigationArrow {
+  transform: translateX(0.1rem) rotate(-45deg);
+}
+
+.workspaceNavigationButton[data-direction="next"] .workspaceNavigationArrow {
+  transform: translateX(-0.1rem) rotate(135deg);
+}

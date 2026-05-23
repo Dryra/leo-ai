@@ -9,6 +9,10 @@ import {
   type SpatialObjectKind,
 } from "../../stores/SpatialObjectStore";
 import { useHintStore } from "../../stores/hintStore";
+import {
+  useWorkspaceStore,
+  type WorkspaceObjectType,
+} from "../../stores/workspaceStore";
 
 const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
@@ -42,32 +46,44 @@ export function ObjectDropZone({
   const [isDragging, setIsDragging] = useState(false);
   const { setState } = useAgentStore();
   const { object, setObject, patchObject } = useSpatialObjectStore();
+  const objects = useWorkspaceStore((state) => state.objects);
+  const activeObjectId = useWorkspaceStore((state) => state.activeObjectId);
+  const addObject = useWorkspaceStore((state) => state.addObject);
+  const updateObject = useWorkspaceStore((state) => state.updateObject);
   const { setHint, clearHint } = useHintStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const uploadRunRef = useRef(0);
+  const activeWorkspaceObject =
+    objects.find((workspaceObject) => workspaceObject.id === activeObjectId) ??
+    null;
+  const displayedObjectName = activeWorkspaceObject?.fileName;
 
   async function handleFile(file: File) {
     uploadRunRef.current += 1;
     const uploadRun = uploadRunRef.current;
     const abortController = new AbortController();
     const kind = getKind(file);
+    const objectId = crypto.randomUUID();
     const previewUrl = kind === "image" ? URL.createObjectURL(file) : undefined;
-
-    if (object?.previewUrl) {
-      URL.revokeObjectURL(object.previewUrl);
-    }
 
     uploadAbortControllerRef.current?.abort();
     uploadAbortControllerRef.current = abortController;
 
     setObject({
-      id: crypto.randomUUID(),
+      id: objectId,
       kind,
       fileName: file.name,
       mimeType: file.type,
       previewUrl,
       status: "uploading",
+    });
+    addObject({
+      id: objectId,
+      fileName: file.name,
+      type: getWorkspaceType(file),
+      previewUrl,
+      createdAt: Date.now(),
     });
 
     setHint(`Inspecting ${file.name}`);
@@ -90,6 +106,14 @@ export function ObjectDropZone({
         detectedType: result.detectedType,
         summary: result.summary,
         suggestedActions: result.suggestedActions,
+      });
+      updateObject(objectId, {
+        id: result.objectId,
+        fileName: file.name,
+        type: getWorkspaceType(file),
+        previewUrl,
+        summary: result.summary,
+        createdAt: Date.now(),
       });
       await onAnalysisComplete?.(result);
       setHint(`Ready: ${file.name}`);
@@ -132,12 +156,29 @@ export function ObjectDropZone({
     }
   }
 
+  function getWorkspaceType(file: File): WorkspaceObjectType {
+    if (file.type.startsWith("image/")) return "image";
+    if (file.type === "application/pdf") return "pdf";
+    if (
+      file.name.endsWith(".ts") ||
+      file.name.endsWith(".tsx") ||
+      file.name.endsWith(".js") ||
+      file.name.endsWith(".json")
+    ) {
+      return "code";
+    }
+
+    if (file.type.startsWith("text/")) return "text";
+
+    return "unknown";
+  }
+
   return (
     <div
       className={[
         "objectDropZone",
         isDragging ? "isDragging" : "",
-        object ? "hasObject" : "",
+        displayedObjectName ? "hasObject" : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -173,9 +214,9 @@ export function ObjectDropZone({
         }}
       />
       <span className="objectDropZoneLabel">
-        {object ? object.fileName : "Drop object into workspace"}
+        {displayedObjectName ?? "Drop object into workspace"}
       </span>
-      {object && (
+      {displayedObjectName && (
         <button
           aria-label="Delete uploaded object"
           className="objectDropZoneDelete"

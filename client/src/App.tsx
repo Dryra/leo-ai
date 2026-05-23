@@ -11,6 +11,7 @@ import { useAgentStore } from "./stores/agentStore";
 import { STATE_VISUALS } from "./constants/stateVisuals";
 import { NeuroModeToggle } from "./components/Chat/NeuroModeToggle";
 import { useNeuroVoiceStore } from "./stores/neuroVoiceStore";
+import { WorkspaceNavigation } from "./components/Layouts/WorkspaceNavigation";
 
 function App() {
   const [facialExpression, setFacialExpression] =
@@ -59,6 +60,7 @@ function App() {
               {isChatVisible ? label : ""}
             </span>
           )}
+
           <NeuroModeToggle isChatVisible={isChatVisible} />
           <button
             className={isChatVisible ? "hideChatWindow" : "showChatWindow"}

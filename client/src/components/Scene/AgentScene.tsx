@@ -7,9 +7,9 @@ import { FaceModel } from "./FaceModel";
 import type { FacialExpressionName } from "../../constants/Expressions";
 import { FuturisticEnvironment } from "./FuturisticEnvironment";
 import { VoiceWaveform } from "./VoiceWaveform";
-import { SpatialObjectDisplay } from "./SpatialObjectDisplay";
 import { useAgentStore } from "../../stores/agentStore";
 import { useCameraStore } from "../../stores/cameraStore";
+import { WorkspaceRing } from "./WorkspaceRing";
 
 const INITIAL_CAMERA_POSITION = new THREE.Vector3(0.8, 0.8, 7);
 const INITIAL_CAMERA_TARGET = new THREE.Vector3(0, 0.8, 0);
@@ -190,7 +190,7 @@ export function AgentScene({ facialExpression }: AgentSceneProps) {
         <VoiceWaveform color="#38e8ff" />
         <VoiceWaveform color="#a855f7" />
       </group>
-      <SpatialObjectDisplay />
+      <WorkspaceRing position={[0, -2, -4]} />
 
       <OrbitControls
         ref={controlsRef}

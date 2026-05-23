@@ -16,10 +16,10 @@
   align-items: center;
   position: absolute;
   right: 40px;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 48%;
+  transform: translateY(-48%);
   width: 360px;
-  height: 70svh;
+  height: 80svh;
   pointer-events: none;
 }
 
@@ -76,7 +76,9 @@
 
 .hideChatWindow,
 .showChatWindow,
+.objectDropZoneDelete,
 .record-button,
+.workspaceNavigationButton,
 .bottom-row .input-row button,
 .backgroundAudioControls button {
   background: var(--agent-ui-color);

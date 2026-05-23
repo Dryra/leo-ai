@@ -744,6 +744,7 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
 
       setMorphTarget(mesh, "browInnerUp", mouthMovement, 0.35);
     });
+
   });
 
   return (

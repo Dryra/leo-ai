@@ -5,7 +5,7 @@ import { useAgentStore } from "../../stores/agentStore";
 
 import { useFrame } from "@react-three/fiber";
 import { Suspense, useRef, useState } from "react";
-import { MathUtils, Vector3, type Group } from "three";
+import { DoubleSide, MathUtils, Vector3, type Group } from "three";
 
 function ImageObject({ url }: { url: string }) {
   const texture = useTexture(url);
@@ -13,7 +13,7 @@ function ImageObject({ url }: { url: string }) {
   return (
     <mesh>
       <planeGeometry args={[2.2, 1.35]} />
-      <meshBasicMaterial map={texture} transparent />
+      <meshBasicMaterial map={texture} transparent side={DoubleSide} />
     </mesh>
   );
 }
@@ -96,7 +96,7 @@ function ModelObject() {
   });
 
   return (
-    <group ref={groupRef} scale={1}>
+    <group ref={groupRef} scale={0.1}>
       <primitive object={scene} />
     </group>
   );

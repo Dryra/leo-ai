@@ -138,6 +138,7 @@ function BrainConnectionLine({
 
 export function AIBrain() {
   const groupRef = useRef<THREE.Group>(null);
+  const state = useAgentStore((store) => store.state);
 
   const { nodes, connections } = useMemo(() => {
     const radius = 1.25;
@@ -197,9 +198,14 @@ export function AIBrain() {
     if (!groupRef.current) return;
 
     const time = clock.getElapsedTime();
+    const isPulsing = state === "thinking" || state === "inspecting";
+    const pulse = isPulsing ? 1 + Math.sin(time * 4.5) * 0.14 : 1;
 
     groupRef.current.rotation.y = time * 0.08;
     groupRef.current.rotation.x = Math.sin(time * 0.25) * 0.12;
+    groupRef.current.scale.setScalar(
+      THREE.MathUtils.lerp(groupRef.current.scale.x, pulse, 0.12),
+    );
   });
 
   return (

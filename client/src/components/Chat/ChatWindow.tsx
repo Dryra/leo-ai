@@ -17,6 +17,11 @@ import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
 import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
 import { useAlwaysListening } from "../../hooks/useAlwaysLIstening";
 import { generateSpeech } from "../../services/api";
+import { WorkspaceNavigation } from "../Layouts/WorkspaceNavigation";
+import {
+  useWorkspaceStore,
+  type WorkspaceObjectType,
+} from "../../stores/workspaceStore";
 
 type ChatMessage = {
   id: string;
@@ -77,6 +82,7 @@ export function ChatWindow({
 
   const state = useAgentStore((store) => store.state);
   const setState = useAgentStore((store) => store.setState);
+  const addWorkspaceObject = useWorkspaceStore((store) => store.addObject);
   const setSpeaking = useAgentStore((store) => store.setSpeaking);
   const setEmotion = useAgentStore((store) => store.setEmotion);
   const setMouthOpen = useAgentStore((store) => store.setMouthOpen);
@@ -269,23 +275,24 @@ export function ChatWindow({
   }
 
   function displayAttachmentInWorkspace(attachment: ChatAttachment) {
-    const currentObject = useSpatialObjectStore.getState().object;
-
-    // CLeanup current loaded object if any
-    if (currentObject?.previewUrl) {
-      URL.revokeObjectURL(currentObject.previewUrl);
-    }
-
     const blob = attachmentToBlob(attachment);
     const previewUrl = URL.createObjectURL(blob);
+    const objectId = crypto.randomUUID();
 
     useSpatialObjectStore.getState().setObject({
-      id: crypto.randomUUID(),
+      id: objectId,
       kind: getSpatialObjectKind(attachment.mimeType),
       fileName: attachment.fileName,
       mimeType: attachment.mimeType,
       previewUrl,
       status: "ready",
+    });
+    addWorkspaceObject({
+      id: objectId,
+      fileName: attachment.fileName,
+      type: getWorkspaceObjectType(attachment.mimeType, attachment.fileName),
+      previewUrl,
+      createdAt: Date.now(),
     });
   }
 
@@ -301,6 +308,29 @@ export function ChatWindow({
     if (mimeType === "application/pdf") return "pdf";
 
     return "text";
+  }
+
+  function getWorkspaceObjectType(
+    mimeType: string,
+    fileName: string,
+  ): WorkspaceObjectType {
+    if (mimeType.startsWith("image/")) return "image";
+    if (mimeType === "application/pdf") return "pdf";
+    if (
+      fileName.endsWith(".ts") ||
+      fileName.endsWith(".tsx") ||
+      fileName.endsWith(".js") ||
+      fileName.endsWith(".jsx") ||
+      fileName.endsWith(".json") ||
+      fileName.endsWith(".css") ||
+      fileName.endsWith(".scss") ||
+      fileName.endsWith(".html")
+    ) {
+      return "code";
+    }
+    if (mimeType.startsWith("text/")) return "text";
+
+    return "unknown";
   }
 
   function getReturnStateAfterSpeaking() {
@@ -673,6 +703,7 @@ export function ChatWindow({
         }}
         demoToken={demoToken}
       />
+      <WorkspaceNavigation></WorkspaceNavigation>
     </div>
   );
 }
