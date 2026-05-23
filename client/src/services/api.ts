@@ -83,6 +83,24 @@ export async function sendMessage(message: string, demoToken: string | null) {
   };
 }
 
+export async function generateSpeech(text: string, demoToken: string | null) {
+  const response = await axios.post(
+    `${API_URL}/api/ai/speech`,
+    { text },
+    {
+      headers: {
+        ...getDemoTokenHeaders(demoToken),
+        "x-session-id": getSessionId(),
+      },
+    },
+  );
+
+  return response.data as {
+    audio: string;
+    mimeType: string;
+  };
+}
+
 export async function sendVoiceMessage(
   audioBlob: Blob,
   demoToken: string | null,

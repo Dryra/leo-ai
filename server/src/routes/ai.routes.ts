@@ -552,104 +552,135 @@ router.post("/chat", async (req, res) => {
     }
 
     await runWithSessionLock(sessionId, async () => {
-    const imageGenerationPrompt = getImageGenerationPrompt(message);
+      const imageGenerationPrompt = getImageGenerationPrompt(message);
 
-    const response = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
-        CHAT_FILE_INSTRUCTIONS,
-        ...getConversationInput(sessionId, message),
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "chat_response",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              reply: { type: "string" },
-              shouldCreateFile: { type: "boolean" },
-              fileName: { type: ["string", "null"] },
-              mimeType: { type: ["string", "null"] },
-              fileContent: { type: ["string", "null"] },
-              steps: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    type: {
-                      type: "string",
-                      enum: ["status", "result"],
+      const response = await openai.responses.create({
+        model: "gpt-4.1-mini",
+        input: [
+          CHAT_FILE_INSTRUCTIONS,
+          ...getConversationInput(sessionId, message),
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "chat_response",
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                reply: { type: "string" },
+                shouldCreateFile: { type: "boolean" },
+                fileName: { type: ["string", "null"] },
+                mimeType: { type: ["string", "null"] },
+                fileContent: { type: ["string", "null"] },
+                steps: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      type: {
+                        type: "string",
+                        enum: ["status", "result"],
+                      },
+                      text: { type: "string" },
+                      speak: { type: "boolean" },
                     },
-                    text: { type: "string" },
-                    speak: { type: "boolean" },
+                    required: ["type", "text", "speak"],
                   },
-                  required: ["type", "text", "speak"],
                 },
               },
+              required: [
+                "reply",
+                "shouldCreateFile",
+                "fileName",
+                "mimeType",
+                "fileContent",
+                "steps",
+              ],
             },
-            required: [
-              "reply",
-              "shouldCreateFile",
-              "fileName",
-              "mimeType",
-              "fileContent",
-              "steps",
-            ],
           },
         },
-      },
+      });
+      const chatResponse = parseChatResponse(response.output_text);
+      const aiText = chatResponse.reply;
+      const attachment = imageGenerationPrompt
+        ? await createImageAttachment(
+            createImageFileName(imageGenerationPrompt),
+            "image/png",
+            imageGenerationPrompt,
+          )
+        : await createChatAttachment(chatResponse);
+      const responseText =
+        imageGenerationPrompt && attachment
+          ? "I generated the image. You can download it below."
+          : aiText;
+
+      const steps =
+        imageGenerationPrompt && attachment
+          ? [
+              {
+                type: "result" as const,
+                text: responseText,
+                speak: true,
+              },
+            ]
+          : chatResponse.steps;
+
+      addAssistantMessage(sessionId, responseText);
+
+      const speech = await openai.audio.speech.create({
+        model: "gpt-4o-mini-tts",
+        voice: "alloy",
+        input: responseText,
+      });
+
+      const audioBuffer = Buffer.from(await speech.arrayBuffer());
+
+      res.json({
+        text: responseText,
+        steps,
+        audio: audioBuffer.toString("base64"),
+        mimeType: "audio/mpeg",
+        emotion: detectEmotion(responseText),
+        gesture: detectGesture(responseText),
+        ...(attachment ? { attachment } : {}),
+      });
     });
-    const chatResponse = parseChatResponse(response.output_text);
-    const aiText = chatResponse.reply;
-    const attachment = imageGenerationPrompt
-      ? await createImageAttachment(
-          createImageFileName(imageGenerationPrompt),
-          "image/png",
-          imageGenerationPrompt,
-        )
-      : await createChatAttachment(chatResponse);
-    const responseText =
-      imageGenerationPrompt && attachment
-        ? "I generated the image. You can download it below."
-        : aiText;
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "AI request failed" });
+  }
+});
 
-    const steps =
-      imageGenerationPrompt && attachment
-        ? [
-            {
-              type: "result" as const,
-              text: responseText,
-              speak: true,
-            },
-          ]
-        : chatResponse.steps;
+// SPeech endpoint
+router.post("/speech", async (req, res) => {
+  try {
+    if (!hasDemoAccess(req)) {
+      return sendUnauthorizedDemoResponse(res);
+    }
 
-    addAssistantMessage(sessionId, responseText);
+    const { text } = req.body;
+
+    if (typeof text !== "string" || !text.trim()) {
+      return res.status(400).json({ error: "Text is required" });
+    }
 
     const speech = await openai.audio.speech.create({
       model: "gpt-4o-mini-tts",
       voice: "alloy",
-      input: responseText,
+      input: text.trim(),
     });
 
     const audioBuffer = Buffer.from(await speech.arrayBuffer());
 
     res.json({
-      text: responseText,
-      steps,
       audio: audioBuffer.toString("base64"),
       mimeType: "audio/mpeg",
-      emotion: detectEmotion(responseText),
-      gesture: detectGesture(responseText),
-      ...(attachment ? { attachment } : {}),
-    });
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "AI request failed" });
+    res.status(500).json({ error: "Speech request failed" });
   }
 });
 
@@ -688,103 +719,103 @@ router.post("/voice", upload.single("audio"), async (req, res) => {
     const imageGenerationPrompt = getImageGenerationPrompt(userText);
 
     await runWithSessionLock(sessionId, async () => {
-    const response = await openai.responses.create({
-      model: "gpt-4.1-mini",
-      input: [
-        CHAT_FILE_INSTRUCTIONS,
-        ...getConversationInput(sessionId, userText),
-      ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "chat_response",
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              reply: { type: "string" },
-              shouldCreateFile: { type: "boolean" },
-              fileName: { type: ["string", "null"] },
-              mimeType: { type: ["string", "null"] },
-              fileContent: { type: ["string", "null"] },
-              steps: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: {
-                    type: {
-                      type: "string",
-                      enum: ["status", "result"],
+      const response = await openai.responses.create({
+        model: "gpt-4.1-mini",
+        input: [
+          CHAT_FILE_INSTRUCTIONS,
+          ...getConversationInput(sessionId, userText),
+        ],
+        text: {
+          format: {
+            type: "json_schema",
+            name: "chat_response",
+            schema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                reply: { type: "string" },
+                shouldCreateFile: { type: "boolean" },
+                fileName: { type: ["string", "null"] },
+                mimeType: { type: ["string", "null"] },
+                fileContent: { type: ["string", "null"] },
+                steps: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    properties: {
+                      type: {
+                        type: "string",
+                        enum: ["status", "result"],
+                      },
+                      text: { type: "string" },
+                      speak: { type: "boolean" },
                     },
-                    text: { type: "string" },
-                    speak: { type: "boolean" },
+                    required: ["type", "text", "speak"],
                   },
-                  required: ["type", "text", "speak"],
                 },
               },
+              required: [
+                "reply",
+                "shouldCreateFile",
+                "fileName",
+                "mimeType",
+                "fileContent",
+                "steps",
+              ],
             },
-            required: [
-              "reply",
-              "shouldCreateFile",
-              "fileName",
-              "mimeType",
-              "fileContent",
-              "steps",
-            ],
           },
         },
-      },
-    });
+      });
 
-    const chatResponse = parseChatResponse(response.output_text);
-    const aiText = chatResponse.reply;
-    const attachment = imageGenerationPrompt
-      ? await createImageAttachment(
-          createImageFileName(imageGenerationPrompt),
-          "image/png",
-          imageGenerationPrompt,
-        )
-      : await createChatAttachment(chatResponse);
-    const responseText =
-      imageGenerationPrompt && attachment
-        ? "I generated the image. You can download it below."
-        : aiText;
+      const chatResponse = parseChatResponse(response.output_text);
+      const aiText = chatResponse.reply;
+      const attachment = imageGenerationPrompt
+        ? await createImageAttachment(
+            createImageFileName(imageGenerationPrompt),
+            "image/png",
+            imageGenerationPrompt,
+          )
+        : await createChatAttachment(chatResponse);
+      const responseText =
+        imageGenerationPrompt && attachment
+          ? "I generated the image. You can download it below."
+          : aiText;
 
-    const steps =
-      imageGenerationPrompt && attachment
-        ? [
-            {
-              type: "result" as const,
-              text: responseText,
-              speak: true,
-            },
-          ]
-        : chatResponse.steps;
+      const steps =
+        imageGenerationPrompt && attachment
+          ? [
+              {
+                type: "result" as const,
+                text: responseText,
+                speak: true,
+              },
+            ]
+          : chatResponse.steps;
 
-    addAssistantMessage(sessionId, responseText);
+      addAssistantMessage(sessionId, responseText);
 
-    const speech = await openai.audio.speech.create({
-      model: "gpt-4o-mini-tts",
-      voice: "echo",
-      input: responseText,
-      //format: "mp3",
-    });
+      const speech = await openai.audio.speech.create({
+        model: "gpt-4o-mini-tts",
+        voice: "echo",
+        input: responseText,
+        //format: "mp3",
+      });
 
-    const audioBuffer = Buffer.from(await speech.arrayBuffer());
+      const audioBuffer = Buffer.from(await speech.arrayBuffer());
 
-    fs.unlinkSync(audioPath);
+      fs.unlinkSync(audioPath);
 
-    res.json({
-      transcript: userText,
-      steps,
-      reply: responseText,
-      audio: audioBuffer.toString("base64"),
-      mimeType: "audio/mpeg",
-      emotion: detectEmotion(responseText),
-      gesture: detectGesture(responseText),
-      ...(attachment ? { attachment } : {}),
-    });
+      res.json({
+        transcript: userText,
+        steps,
+        reply: responseText,
+        audio: audioBuffer.toString("base64"),
+        mimeType: "audio/mpeg",
+        emotion: detectEmotion(responseText),
+        gesture: detectGesture(responseText),
+        ...(attachment ? { attachment } : {}),
+      });
     });
   } catch (error) {
     console.error(error);

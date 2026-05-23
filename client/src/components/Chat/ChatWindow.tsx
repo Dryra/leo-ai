@@ -16,6 +16,7 @@ import { ObjectDropZone } from "../SpatialObject/ObjectDropZone";
 import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
 import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
 import { useAlwaysListening } from "../../hooks/useAlwaysLIstening";
+import { generateSpeech } from "../../services/api";
 
 type ChatMessage = {
   id: string;
@@ -107,6 +108,11 @@ export function ChatWindow({
 
   const attentionTimeoutRef = useRef<number | null>(null);
 
+  const hiddenAtRef = useRef<number | null>(null);
+  const hasWelcomedBackRef = useRef(false);
+  const welcomeBackInProgressRef = useRef(false);
+  const loadingRef = useRef(false);
+
   const handleNeuroUtterance = useCallback(
     async (audioBlob: Blob) => {
       await processVoiceMessage(audioBlob);
@@ -118,6 +124,10 @@ export function ChatWindow({
     enabled: neuroEnabled && !isRecording && !loading,
     onUtterance: handleNeuroUtterance,
   });
+
+  useEffect(() => {
+    loadingRef.current = loading;
+  }, [loading]);
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {

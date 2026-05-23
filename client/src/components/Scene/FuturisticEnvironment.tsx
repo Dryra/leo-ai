@@ -1,10 +1,20 @@
 import { Float, Stars } from "@react-three/drei";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useAgentStore } from "../../stores/agentStore";
 import { useBackgroundAudioStore } from "../../stores/backgroundAudioStore";
 import { STATE_VISUALS } from "../../constants/stateVisuals";
+import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
+
+const DEFAULT_FOG_NEAR = 3;
+const DEFAULT_FOG_FAR = 9;
+const OBJECT_FOCUS_FOG_NEAR = 7;
+const OBJECT_FOCUS_FOG_FAR = 16;
+const HOLOGRAM_GRID_Y = -2.55;
+const HOLOGRAM_GRID_SIZE = 120;
+const HOLOGRAM_GRID_DIVISIONS = 240;
+const HOLOGRAM_GRID_CELL_SIZE = HOLOGRAM_GRID_SIZE / HOLOGRAM_GRID_DIVISIONS;
 
 function NeonRing({
   radius,
@@ -52,6 +62,7 @@ function NeonRing({
 
 function HologramGrid() {
   const gridRef = useRef<THREE.GridHelper>(null);
+  const camera = useThree((state) => state.camera);
   const { state, mouthOpen } = useAgentStore();
   const { amplitude, bass, mids, highs, isPlaying } = useBackgroundAudioStore();
 
@@ -60,9 +71,9 @@ function HologramGrid() {
 
     const visual = STATE_VISUALS[state];
     const time = clock.getElapsedTime();
-    const material = Array.isArray(gridRef.current.material)
-      ? gridRef.current.material[0]
-      : gridRef.current.material;
+    const materials = Array.isArray(gridRef.current.material)
+      ? gridRef.current.material
+      : [gridRef.current.material];
     const speechBlink =
       state === "speaking" ? Math.sin(time * 18) * mouthOpen * 0.45 : 0;
 
@@ -81,28 +92,42 @@ function HologramGrid() {
       THREE.MathUtils.lerp(gridRef.current.scale.x, targetScale, 0.12),
     );
 
-    material.transparent = true;
-    material.color.lerp(
-      bassPulse > 0.08 ? bassGlowColor : environmentColor,
-      0.04 + highsPulse * 0.5 + bassPulse * 0.35,
-    );
+    gridRef.current.position.x =
+      Math.round(camera.position.x / HOLOGRAM_GRID_CELL_SIZE) *
+      HOLOGRAM_GRID_CELL_SIZE;
+    gridRef.current.position.z =
+      Math.round(camera.position.z / HOLOGRAM_GRID_CELL_SIZE) *
+      HOLOGRAM_GRID_CELL_SIZE;
 
-    material.opacity = THREE.MathUtils.lerp(
-      material.opacity,
+    const targetGridColor =
+      bassPulse > 0.08 ? bassGlowColor : environmentColor;
+    const colorLerpSpeed = 0.04 + highsPulse * 0.5 + bassPulse * 0.35;
+    const targetOpacity =
       visual.ringOpacity * 1.25 +
-        audioPulse * 0.5 +
-        bassPulse * 0.45 +
-        midsPulse * 0.1 +
-        Math.max(0, speechBlink),
-      0.12,
-    );
+      audioPulse * 0.5 +
+      bassPulse * 0.45 +
+      midsPulse * 0.1 +
+      Math.max(0, speechBlink);
+
+    materials.forEach((gridMaterial) => {
+      const lineMaterial = gridMaterial as THREE.LineBasicMaterial;
+
+      lineMaterial.transparent = true;
+      lineMaterial.color.lerp(targetGridColor, colorLerpSpeed);
+      lineMaterial.opacity = THREE.MathUtils.lerp(
+        lineMaterial.opacity,
+        targetOpacity,
+        0.12,
+      );
+    });
   });
 
   return (
     <gridHelper
       ref={gridRef}
-      args={[18, 42, "#849c9f", "#155e75"]}
-      position={[0, -2.55, 0]}
+      args={[HOLOGRAM_GRID_SIZE, HOLOGRAM_GRID_DIVISIONS, "#849c9f", "#155e75"]}
+      position={[0, HOLOGRAM_GRID_Y, 0]}
+      frustumCulled={false}
     />
   );
 }
@@ -262,6 +287,9 @@ export function FuturisticEnvironment() {
   const fogColorRef = useRef(new THREE.Color("#020617"));
 
   const { state, mouthOpen } = useAgentStore();
+  const hasSpatialObject = useSpatialObjectStore((store) =>
+    Boolean(store.object),
+  );
 
   const mainLightTargetRef = useRef(new THREE.Vector3());
   const sideLightTargetRef = useRef(new THREE.Vector3());
@@ -283,12 +311,23 @@ export function FuturisticEnvironment() {
     fogColorRef.current.copy(backgroundColorRef.current);
     scene.background = backgroundColorRef.current;
 
-    if (scene.fog instanceof THREE.Fog) {
-      scene.fog.color.copy(fogColorRef.current);
-    }
-
     // Light positioning while inspecting or ready
     const isInspectingObject = state === "inspecting" || state === "ready";
+    const shouldReduceFog = isInspectingObject && hasSpatialObject;
+
+    if (scene.fog instanceof THREE.Fog) {
+      scene.fog.color.copy(fogColorRef.current);
+      scene.fog.near = THREE.MathUtils.lerp(
+        scene.fog.near,
+        shouldReduceFog ? OBJECT_FOCUS_FOG_NEAR : DEFAULT_FOG_NEAR,
+        0.08,
+      );
+      scene.fog.far = THREE.MathUtils.lerp(
+        scene.fog.far,
+        shouldReduceFog ? OBJECT_FOCUS_FOG_FAR : DEFAULT_FOG_FAR,
+        0.08,
+      );
+    }
 
     mainLightTargetRef.current.set(
       0,
@@ -341,9 +380,9 @@ export function FuturisticEnvironment() {
   return (
     <>
       <color attach="background" args={["#020617"]} />
-      <fog attach="fog" args={["#020617", 3, 9]} />
+      <fog attach="fog" args={["#020617", DEFAULT_FOG_NEAR, DEFAULT_FOG_FAR]} />
 
-      <ambientLight intensity={0.18} />
+      <ambientLight intensity={0.2} />
 
       <pointLight
         ref={mainLightRef}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -55,8 +55,7 @@ type HeadBehavior =
   | "lookUp"
   | "lookDown"
   | "curiousTilt"
-  | "scanRoom"
-  | "spin360";
+  | "scanRoom";
 
 type HeadMotionState = {
   behavior: HeadBehavior;
@@ -114,8 +113,75 @@ const FACE_STATE_VISUALS: Record<
   },
 };
 
+//Move UNDER_FACE_LIGHT_POSITION.y more negative to place it lower.
+//Move UNDER_FACE_LIGHT_TARGET_POSITION.y higher to aim more toward forehead/eyes.
+//Increase UNDER_FACE_LIGHT_POSITION.z to bring the light more toward the camera/front.
+
+const UNDER_FACE_LIGHT_POSITION: [number, number, number] = [0, -1.25, 1.4];
+const UNDER_FACE_LIGHT_TARGET_POSITION: [number, number, number] = [
+  0, 0.65, 0.15,
+];
+
+function getSceneDebugEnabled() {
+  if (typeof window === "undefined") return false;
+
+  return new URLSearchParams(window.location.search).get("debug") === "true";
+}
+
+function UnderFaceLightDebug({
+  lightRef,
+}: {
+  lightRef: RefObject<THREE.SpotLight | null>;
+}) {
+  const scene = useThree((state) => state.scene);
+  const helperRef = useRef<THREE.SpotLightHelper | null>(null);
+
+  useEffect(() => {
+    if (!lightRef.current) return;
+
+    const helper = new THREE.SpotLightHelper(lightRef.current, "#ffffff");
+
+    helper.name = "under_face_light_helper";
+    scene.add(helper);
+    helperRef.current = helper;
+
+    return () => {
+      scene.remove(helper);
+      helper.dispose();
+      helperRef.current = null;
+    };
+  }, [lightRef, scene]);
+
+  useFrame(() => {
+    helperRef.current?.update();
+  });
+
+  return (
+    <>
+      <mesh
+        position={UNDER_FACE_LIGHT_POSITION}
+        name="under_face_light_source_marker"
+      >
+        <sphereGeometry args={[0.035, 16, 16]} />
+        <meshBasicMaterial color="#ffd166" toneMapped={false} />
+      </mesh>
+
+      <mesh
+        position={UNDER_FACE_LIGHT_TARGET_POSITION}
+        name="under_face_light_target_marker"
+      >
+        <sphereGeometry args={[0.028, 16, 16]} />
+        <meshBasicMaterial color="#ffffff" toneMapped={false} />
+      </mesh>
+    </>
+  );
+}
+
 export function FaceModel({ facialExpression }: FaceModelProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const underFaceLightRef = useRef<THREE.SpotLight>(null);
+  const underFaceLightTargetRef = useRef<THREE.Object3D>(null);
+  const showUnderFaceLightDebug = useMemo(getSceneDebugEnabled, []);
   const shellMeshesRef = useRef<HologramShellMesh[]>([]);
   const neuroWireframeRef = useRef<THREE.Mesh | null>(null);
   const faceColorRef = useRef(new THREE.Color("#38bdf8"));
@@ -152,6 +218,12 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
   const blueMaterial = useMemo(() => createHologramMaterial("#38bdf8"), []);
 
   const winkStartedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!underFaceLightRef.current || !underFaceLightTargetRef.current) return;
+
+    underFaceLightRef.current.target = underFaceLightTargetRef.current;
+  }, []);
 
   const { allMeshes, morphMeshes } = useMemo(() => {
     const morphMeshes: MorphMesh[] = [];
@@ -313,7 +385,8 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
 
     const revealElapsed = time - revealStartedAtRef.current;
     const revealProgress = THREE.MathUtils.smoothstep(revealElapsed, 0.15, 2.2);
-    const shellFadeOut = 1 - THREE.MathUtils.smoothstep(revealElapsed, 2.0, 2.9);
+    const shellFadeOut =
+      1 - THREE.MathUtils.smoothstep(revealElapsed, 2.0, 2.9);
     const faceVisual = FACE_STATE_VISUALS[state];
     const faceTargetColor = new THREE.Color(faceVisual.color);
     const speechBlink = state === "speaking" ? mouthOpen * 0.45 : 0;
@@ -403,7 +476,7 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
       }
     }
 
-    const pickHeadBehavior = (time: number, isSpeakingNow: boolean) => {
+    const pickHeadBehavior = (time: number) => {
       if (!groupRef.current) return;
 
       const current = groupRef.current.rotation;
@@ -420,10 +493,8 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         "scanRoom",
       ];
 
-      const canDoBigMove = !isSpeakingNow && Math.random() < 0.08;
-      const behavior = canDoBigMove
-        ? "spin360"
-        : normalBehaviors[Math.floor(Math.random() * normalBehaviors.length)];
+      const behavior =
+        normalBehaviors[Math.floor(Math.random() * normalBehaviors.length)];
 
       const expressionByBehavior: Record<HeadBehavior, FacialExpressionName> = {
         idle: "happy",
@@ -433,7 +504,6 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         lookDown: "happy",
         curiousTilt: "happy",
         scanRoom: "happy",
-        spin360: "happy",
       };
 
       const expression = expressionByBehavior[behavior];
@@ -474,13 +544,6 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
           duration = THREE.MathUtils.randFloat(2.4, 3.6);
           break;
 
-        case "spin360":
-          to.y = current.y + Math.PI * 2;
-          to.x = 0;
-          to.z = 0;
-          duration = THREE.MathUtils.randFloat(3.5, 5);
-          break;
-
         case "idle":
         default:
           to.x = THREE.MathUtils.randFloat(-0.04, 0.04);
@@ -505,7 +568,7 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
       const canUseGeneralHeadMotion = state === "idle";
 
       if (canUseGeneralHeadMotion && time > nextHeadMotionAtRef.current) {
-        pickHeadBehavior(time, isSpeaking);
+        pickHeadBehavior(time);
         nextHeadMotionAtRef.current = time + THREE.MathUtils.randFloat(3, 8);
       }
 
@@ -534,10 +597,9 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         ? 0.34 + inspectingFocusPulse * 0.045
         : 0;
       const inspectingY = inspectingSweep * 0.38;
-      const inspectingZ =
-        isInspectingObject
-          ? -0.08 + Math.sin(time * 1.05) * 0.09 * inspectingIntensity
-          : 0;
+      const inspectingZ = isInspectingObject
+        ? -0.08 + Math.sin(time * 1.05) * 0.09 * inspectingIntensity
+        : 0;
 
       let gestureX = 0;
       let gestureY = 0;
@@ -573,9 +635,7 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
       }
 
       // POSITIONING
-      const targetPositionX = isInspectingObject
-        ? inspectingSweep * 0.28
-        : 0;
+      const targetPositionX = isInspectingObject ? inspectingSweep * 0.28 : 0;
 
       const targetPositionY = isInspectingObject ? 1.85 : 0;
 
@@ -688,6 +748,31 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
 
   return (
     <group ref={groupRef} position={[0, 0, 0]} scale={2.2}>
+      <spotLight
+        ref={underFaceLightRef}
+        position={UNDER_FACE_LIGHT_POSITION}
+        color="#08accd"
+        intensity={0.8}
+        distance={9.2}
+        angle={0.95}
+        penumbra={1}
+        decay={1.2}
+      />
+      <pointLight
+        position={UNDER_FACE_LIGHT_POSITION}
+        color="#9eefff"
+        intensity={0.6}
+        distance={4.8}
+        decay={1.35}
+      />
+      <object3D
+        ref={underFaceLightTargetRef}
+        position={UNDER_FACE_LIGHT_TARGET_POSITION}
+      />
+      {showUnderFaceLightDebug && (
+        <UnderFaceLightDebug lightRef={underFaceLightRef} />
+      )}
+
       {/* ORIGINAL FACE */}
       <primitive object={scene}>
         <group position={[0, 0.8, 0]} scale={0.1}>

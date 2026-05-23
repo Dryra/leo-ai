@@ -13,6 +13,7 @@ import { useCameraStore } from "../../stores/cameraStore";
 
 const INITIAL_CAMERA_POSITION = new THREE.Vector3(0.8, 0.8, 7);
 const INITIAL_CAMERA_TARGET = new THREE.Vector3(0, 0.8, 0);
+const NON_IDLE_AZIMUTH_LIMIT = Math.PI / 2;
 
 export function AgentScene({ facialExpression }: AgentSceneProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
@@ -132,7 +133,6 @@ export function AgentScene({ facialExpression }: AgentSceneProps) {
       if (!controls) return;
 
       const shouldReturnCamera =
-        agentState !== "idle" ||
         wasFreeCameraEnabledRef.current !== freeCameraEnabled;
 
       if (freeCameraEnabled) {
@@ -142,9 +142,9 @@ export function AgentScene({ facialExpression }: AgentSceneProps) {
 
       if (!shouldReturnCamera) return;
 
-      camera.position.lerp(INITIAL_CAMERA_POSITION, 0.08);
-      controls.target.lerp(INITIAL_CAMERA_TARGET, 0.08);
-      controls.update();
+      //camera.position.lerp(INITIAL_CAMERA_POSITION, 0.08);
+      //controls.target.lerp(INITIAL_CAMERA_TARGET, 0.08);
+      //controls.update();
 
       if (camera.position.distanceTo(INITIAL_CAMERA_POSITION) < 0.02) {
         wasFreeCameraEnabledRef.current = false;
@@ -181,27 +181,6 @@ export function AgentScene({ facialExpression }: AgentSceneProps) {
     return null;
   }
 
-  function CameraReturnController({
-    controlsRef,
-  }: {
-    controlsRef: React.RefObject<OrbitControlsImpl | null>;
-  }) {
-    const camera = useThree((state) => state.camera);
-    const agentState = useAgentStore((state) => state.state);
-
-    useFrame(() => {
-      const controls = controlsRef.current;
-
-      if (!controls || agentState === "idle") return;
-
-      camera.position.lerp(INITIAL_CAMERA_POSITION, 0.08);
-      controls.target.lerp(INITIAL_CAMERA_TARGET, 0.08);
-      controls.update();
-    });
-
-    return null;
-  }
-
   return (
     <Canvas camera={{ position: INITIAL_CAMERA_POSITION.toArray(), fov: 80 }}>
       <FuturisticEnvironment />
@@ -213,8 +192,6 @@ export function AgentScene({ facialExpression }: AgentSceneProps) {
       </group>
       <SpatialObjectDisplay />
 
-      <CameraReturnController controlsRef={controlsRef} />
-
       <OrbitControls
         ref={controlsRef}
         enableRotate={true}
@@ -223,6 +200,12 @@ export function AgentScene({ facialExpression }: AgentSceneProps) {
         target={INITIAL_CAMERA_TARGET.toArray()}
         minPolarAngle={Math.PI / 2}
         maxPolarAngle={Math.PI / 2}
+        minAzimuthAngle={
+          agentState === "idle" ? -Infinity : -NON_IDLE_AZIMUTH_LIMIT
+        }
+        maxAzimuthAngle={
+          agentState === "idle" ? Infinity : NON_IDLE_AZIMUTH_LIMIT
+        }
         minDistance={5}
         maxDistance={6}
       />
