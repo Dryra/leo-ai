@@ -16,7 +16,6 @@ import { ObjectDropZone } from "../SpatialObject/ObjectDropZone";
 import { useSpatialObjectStore } from "../../stores/SpatialObjectStore";
 import { useNeuroVoiceStore } from "../../stores/neuroVoiceStore";
 import { useAlwaysListening } from "../../hooks/useAlwaysLIstening";
-import { generateSpeech } from "../../services/api";
 import { WorkspaceNavigation } from "../Layouts/WorkspaceNavigation";
 import {
   useWorkspaceStore,
@@ -117,10 +116,6 @@ export function ChatWindow({
   const [demoToken, setDemoToken] = useState<string | null>(null);
 
   const attentionTimeoutRef = useRef<number | null>(null);
-
-  const hiddenAtRef = useRef<number | null>(null);
-  const hasWelcomedBackRef = useRef(false);
-  const welcomeBackInProgressRef = useRef(false);
   const loadingRef = useRef(false);
 
   const handleNeuroUtterance = useCallback(
