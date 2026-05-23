@@ -345,6 +345,13 @@
   }
 }
 
+.sendTextChat:disabled,
+.record-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+  filter: saturate(0.65);
+}
+
 .record-button.recording {
   background: #ef4444;
 

@@ -114,9 +114,9 @@ function ActiveBaseRing({ isActive }: { isActive: boolean }) {
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.82, 0]}>
       <torusGeometry args={[1.25, 0.025, 16, 96]} />
       <meshBasicMaterial
-        color="#38e8ff"
+        color="#eeeeee"
         transparent
-        opacity={isActive ? 0.85 : 0}
+        opacity={isActive ? 0.55 : 0.1}
         depthWrite={false}
       />
     </mesh>

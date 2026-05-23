@@ -83,6 +83,7 @@ export function ChatWindow({
   const state = useAgentStore((store) => store.state);
   const setState = useAgentStore((store) => store.setState);
   const addWorkspaceObject = useWorkspaceStore((store) => store.addObject);
+  const isSpeaking = useAgentStore((store) => store.isSpeaking);
   const setSpeaking = useAgentStore((store) => store.setSpeaking);
   const setEmotion = useAgentStore((store) => store.setEmotion);
   const setMouthOpen = useAgentStore((store) => store.setMouthOpen);
@@ -98,7 +99,10 @@ export function ChatWindow({
   const { isRecording, startRecording, stopRecording } = useVoiceRecorder();
 
   const [message, setMessage] = useState("");
-  const canSendMessage = message.trim().length > 0 && !loading;
+  const controlsDisabled =
+    isSpeaking || state === "speaking" || state === "inspecting";
+  const canSendMessage =
+    message.trim().length > 0 && !loading && !controlsDisabled;
 
   const isHoldingSpaceRef = useRef(false);
   const isProcessingVoiceRef = useRef(false);
@@ -191,7 +195,7 @@ export function ChatWindow({
   async function handleSend() {
     const userMessage = message.trim();
 
-    if (!userMessage) return;
+    if (!userMessage || !canSendMessage) return;
 
     const returnStateAfterSpeaking = getReturnStateAfterSpeaking();
     const pendingAgentMessageId = crypto.randomUUID();
@@ -442,6 +446,8 @@ export function ChatWindow({
   }
 
   async function handleVoiceClick() {
+    if (controlsDisabled) return;
+
     setError(null);
 
     try {
@@ -468,6 +474,7 @@ export function ChatWindow({
   useEffect(() => {
     async function handleKeyDown(event: KeyboardEvent) {
       if (event.code !== "Space") return;
+      if (controlsDisabled) return;
       if (event.repeat) return;
       if (isHoldingSpaceRef.current) return;
       if (isProcessingVoiceRef.current) return;
@@ -568,6 +575,7 @@ export function ChatWindow({
       window.removeEventListener("keyup", handleKeyUp);
     };
   }, [
+    controlsDisabled,
     startRecording,
     stopRecording,
     setState,
@@ -665,6 +673,7 @@ export function ChatWindow({
             className={
               isRecording ? "record-button recording" : "record-button"
             }
+            disabled={controlsDisabled}
             onClick={() => {
               setAttentionTarget("voiceButton");
               nudgeAttention("voiceButton");
