@@ -39,6 +39,19 @@ function getKind(file: File): SpatialObjectKind {
   return "text";
 }
 
+function splitFileName(fileName: string) {
+  const extensionStart = fileName.lastIndexOf(".");
+
+  if (extensionStart <= 0 || extensionStart === fileName.length - 1) {
+    return { name: fileName, extension: "" };
+  }
+
+  return {
+    name: fileName.slice(0, extensionStart),
+    extension: fileName.slice(extensionStart),
+  };
+}
+
 export function ObjectDropZone({
   onAnalysisComplete,
   demoToken,
@@ -58,6 +71,9 @@ export function ObjectDropZone({
     objects.find((workspaceObject) => workspaceObject.id === activeObjectId) ??
     null;
   const displayedObjectName = activeWorkspaceObject?.fileName;
+  const displayedObjectNameParts = displayedObjectName
+    ? splitFileName(displayedObjectName)
+    : null;
 
   async function handleFile(file: File) {
     uploadRunRef.current += 1;
@@ -214,7 +230,18 @@ export function ObjectDropZone({
         }}
       />
       <span className="objectDropZoneLabel">
-        {displayedObjectName ?? "Drop object into workspace"}
+        {displayedObjectNameParts ? (
+          <>
+            <span className="objectDropZoneFileName">
+              {displayedObjectNameParts.name}
+            </span>
+            <span className="objectDropZoneFileExtension">
+              {displayedObjectNameParts.extension}
+            </span>
+          </>
+        ) : (
+          "Drop object into workspace"
+        )}
       </span>
       {displayedObjectName && (
         <button

@@ -27,11 +27,21 @@
 }
 
 .objectDropZoneLabel {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.objectDropZoneFileName {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
+}
+
+.objectDropZoneFileExtension {
+  flex: 0 0 auto;
 }
 
 .objectDropZoneDelete {

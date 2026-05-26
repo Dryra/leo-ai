@@ -20,7 +20,7 @@ const upload = multer({ dest: "uploads/" });
 
 const demoModeToken = process.env.DEMO_TOKEN;
 const contactEmail = process.env.CONTACT_EMAIL ?? "dryraa@gmail.com";
-const contactLinkedInUrl = process.env.CONTACT_LINKEDIN_URL ?? "hehe";
+const contactLinkedInUrl = process.env.CONTACT_LINKEDIN_URL ?? "";
 
 type OpenAIConversationMessage = {
   role: "system" | "user" | "assistant";

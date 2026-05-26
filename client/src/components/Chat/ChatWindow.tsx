@@ -68,6 +68,19 @@ function attachmentToDownloadUrl(attachment: ChatAttachment) {
   return URL.createObjectURL(blob);
 }
 
+function splitFileName(fileName: string) {
+  const extensionStart = fileName.lastIndexOf(".");
+
+  if (extensionStart <= 0 || extensionStart === fileName.length - 1) {
+    return { name: fileName, extension: "" };
+  }
+
+  return {
+    name: fileName.slice(0, extensionStart),
+    extension: fileName.slice(extensionStart),
+  };
+}
+
 export function ChatWindow({
   className = "",
   setFacialExpression,
@@ -768,6 +781,7 @@ function isContactLinks(value: unknown): value is ContactLinks {
 
 function ChatAttachmentLink({ attachment }: { attachment: ChatAttachment }) {
   const [url, setUrl] = useState("");
+  const { name, extension } = splitFileName(attachment.fileName);
 
   useEffect(() => {
     const nextUrl = attachmentToDownloadUrl(attachment);
@@ -778,7 +792,9 @@ function ChatAttachmentLink({ attachment }: { attachment: ChatAttachment }) {
 
   return (
     <a className="chatAttachment" href={url} download={attachment.fileName}>
-      Download {attachment.fileName}
+      <span className="chatAttachmentPrefix">Download</span>
+      <span className="chatAttachmentName">{name}</span>
+      <span className="chatAttachmentExtension">{extension}</span>
     </a>
   );
 }

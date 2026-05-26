@@ -77,7 +77,7 @@ function HologramGrid() {
     const speechBlink =
       state === "speaking" ? Math.sin(time * 18) * mouthOpen * 0.45 : 0;
 
-    const audioPulse = isPlaying ? amplitude : 0;
+    const audioPulse = isPlaying ? amplitude * 0.01 : 0;
     const bassPulse = isPlaying ? bass : 0;
     const midsPulse = isPlaying ? mids : 0;
     const highsPulse = isPlaying ? highs : 0;
@@ -99,8 +99,7 @@ function HologramGrid() {
       Math.round(camera.position.z / HOLOGRAM_GRID_CELL_SIZE) *
       HOLOGRAM_GRID_CELL_SIZE;
 
-    const targetGridColor =
-      bassPulse > 0.08 ? bassGlowColor : environmentColor;
+    const targetGridColor = bassPulse > 0.08 ? bassGlowColor : environmentColor;
     const colorLerpSpeed = 0.04 + highsPulse * 0.5 + bassPulse * 0.35;
     const targetOpacity =
       visual.ringOpacity * 1.25 +

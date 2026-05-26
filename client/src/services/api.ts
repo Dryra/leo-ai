@@ -38,7 +38,7 @@ export class DemoAccessError extends Error {
     this.name = "DemoAccessError";
     this.contact = {
       email: CONTACT_EMAIL,
-      linkedinUrl: CONTACT_LINKEDIN_URL || "sup",
+      linkedinUrl: CONTACT_LINKEDIN_URL || "",
     };
   }
 }
