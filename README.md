@@ -1,5 +1,7 @@
 # LEO AI
 
+[![Netlify Status](https://api.netlify.com/api/v1/badges/35af6f55-0675-41b1-a16f-c8c8e42f3e66/deploy-status)](https://app.netlify.com/projects/leoai-app/deploys)
+
 A real-time AI avatar built with Three.js, React, and OpenAI.
 
 ## 🎯 Vision
@@ -18,6 +20,25 @@ Inspired by future human-computer interaction systems.
 - Spatial workspace display for generated or uploaded content
 - Demo-token access mode for production deployments
 - Audio-reactive and futuristic visual interface
+- Interactive workspace for file downloads and context (WIP)
+
+## Demo
+
+Live demo: https://leoai-app.netlify.app/
+
+## Preview
+
+![LEO AI object inspection](client/docs/screenshots/leo-ai-object-inspection.png)
+
+![LEO AI PDF generation](client/docs/screenshots/leo-ai-pdf-generation.png)
+
+![LEO AI object analysis](client/docs/screenshots/leo-ai-object-analysis.png)
+
+![LEO AI image generation](client/docs/screenshots/leo-ai-image-generation.png)
+
+![LEO AI interactive workspace](client/docs/screenshots/leo-ai-interactive-workspace.png)
+
+![LEO AI chat speaking](client/docs/screenshots/leo-ai-chat-speaking.png)
 
 ## 🧱 Tech Stack
 
