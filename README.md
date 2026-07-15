@@ -2,7 +2,7 @@
 
 [![Netlify Status](https://api.netlify.com/api/v1/badges/35af6f55-0675-41b1-a16f-c8c8e42f3e66/deploy-status)](https://app.netlify.com/projects/leoai-app/deploys)
 
-A real-time AI avatar built with Three.js, React, and OpenAI.
+A real-time AI avatar built with Three.js, React, Express and OpenAI.
 
 ## 🎯 Vision
 

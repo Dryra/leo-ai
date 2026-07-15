@@ -1,12 +1,12 @@
 {
   "name": "leo-ai",
   "version": "1.0.0",
-  "description": "",
+  "description": "Fontend and backend for leo-ai",
   "scripts": {
     "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\""
   },
   "keywords": [],
-  "author": "",
+  "author": "Ahmed Drira",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
