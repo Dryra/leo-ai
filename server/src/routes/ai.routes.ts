@@ -1045,7 +1045,6 @@ function detectGesture(text: string): DetectedGesture {
     .sort((a, b) => b.score - a.score)[0];
 
   if (bestMatch && bestMatch.score > 0) {
-    console.log("found match for gesture", bestMatch);
     return bestMatch.gesture;
   }
 
@@ -1065,11 +1064,9 @@ function getSessionId(req: Request) {
 router.use(
   (error: unknown, _req: Request, res: Response, next: NextFunction) => {
     if (error instanceof multer.MulterError) {
-      res
-        .status(413)
-        .json({
-          error: "Upload too large or invalid. Send one file up to 5 MB.",
-        });
+      res.status(413).json({
+        error: "Upload too large or invalid. Send one file up to 5 MB.",
+      });
       return;
     }
     next(error);

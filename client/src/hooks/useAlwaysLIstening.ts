@@ -75,7 +75,6 @@ export function useAlwaysListening({
 
       modeRef.current = "idle";
       setNeuroState("idle");
-      console.log("getReturnStateAfterSpeaking", getReturnStateAfterSpeaking());
       setAgentState(getReturnStateAfterSpeaking() ?? "idle");
       tick();
     }

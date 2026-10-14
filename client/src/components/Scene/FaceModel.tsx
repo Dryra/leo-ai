@@ -302,8 +302,6 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         default:
           break;
       }
-
-      //console.log("Morph targets:", mesh.morphTargetDictionary);
     });
 
     const shellMeshes = morphMeshes

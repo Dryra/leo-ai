@@ -112,14 +112,16 @@ export function BackgroundAudioControls() {
 
     if (!gain || !audioContext) return;
 
-    gain.gain.setTargetAtTime(isMuted ? 0 : volume, audioContext.currentTime, 0.02);
+    gain.gain.setTargetAtTime(
+      isMuted ? 0 : volume,
+      audioContext.currentTime,
+      0.02,
+    );
   }, [volume, isMuted]);
 
   async function togglePlay() {
-    console.log("playing");
     const audio = audioRef.current;
     if (!audio) return;
-    console.log("found audio", audio);
     if (isPlaying) {
       audio.pause();
       setIsPlaying(false);
@@ -134,7 +136,6 @@ export function BackgroundAudioControls() {
       }
 
       await audio.play();
-      console.log("audio is playing now");
       setIsPlaying(true);
     } catch (error) {
       console.error("Could not play background audio.", error);
