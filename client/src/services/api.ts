@@ -6,7 +6,6 @@ import type { FacialExpressionName } from "../constants/Expressions";
 const API_URL = import.meta.env.VITE_API_URL;
 const CONTACT_EMAIL = import.meta.env.VITE_CONTACT_EMAIL ?? "dryraa@gmail.com";
 const CONTACT_LINKEDIN_URL = import.meta.env.VITE_CONTACT_LINKEDIN_URL ?? "";
-const IS_DEV = import.meta.env.DEV;
 
 export type ChatResponse = {
   reply: string;
@@ -45,9 +44,7 @@ export class DemoAccessError extends Error {
 
 function getDemoTokenHeaders(demoToken: string | null | undefined) {
   if (!demoToken) {
-    if (IS_DEV) return {};
-
-    throw new DemoAccessError();
+    return {};
   }
 
   return {

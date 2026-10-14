@@ -4,7 +4,8 @@ import cors from "cors";
 import aiRoutes from "./routes/ai.routes";
 
 const app = express();
-const DEMO_TOKEN = process.env.DEMO_TOKEN;
+// Configure explicit trusted proxy addresses/subnets, never trust arbitrary forwarded headers.
+if (process.env.TRUST_PROXY) app.set("trust proxy", process.env.TRUST_PROXY.split(",").map(value => value.trim()));
 
 const allowedOrigins = [
   "http://localhost:5173",

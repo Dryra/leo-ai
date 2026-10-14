@@ -1,5 +1,17 @@
-import { Router, type Request, type Response } from "express";
+import {
+  Router,
+  type Request,
+  type NextFunction,
+  type Response,
+} from "express";
 import multer from "multer";
+import {
+  enforceUsage,
+  hasDemoAccess,
+  reserveImage,
+  UsageLimitError,
+  usageLimits,
+} from "../middleware/usageLimits";
 import { OpenAI, toFile } from "openai";
 import fs from "node:fs";
 import path from "node:path";
@@ -16,11 +28,10 @@ import {
 } from "../services/conversationMemory";
 
 const router = Router();
-const upload = multer({ dest: "uploads/" });
-
-const demoModeToken = process.env.DEMO_TOKEN;
-const contactEmail = process.env.CONTACT_EMAIL ?? "dryraa@gmail.com";
-const contactLinkedInUrl = process.env.CONTACT_LINKEDIN_URL ?? "";
+const upload = multer({
+  dest: "uploads/",
+  limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 4, fieldSize: 4096 },
+});
 
 type OpenAIConversationMessage = {
   role: "system" | "user" | "assistant";
@@ -102,24 +113,6 @@ const TEXT_ATTACHMENT_MIME_TYPES = new Set([
   "application/xml",
   "text/xml",
 ]);
-
-function sendUnauthorizedDemoResponse(res: Response) {
-  return res.status(403).json({
-    error: "Unauthorized. For demo access, please contact the developer.",
-    contact: {
-      email: contactEmail,
-      linkedinUrl: contactLinkedInUrl,
-    },
-  });
-}
-
-function hasDemoAccess(req: Request) {
-  if (process.env.NODE_ENV !== "production") return true;
-
-  const token = req.get("x-demo-token");
-
-  return Boolean(token && token === demoModeToken);
-}
 
 function normalizeAnalysis(value: unknown): ObjectAnalysis {
   if (!value || typeof value !== "object") {
@@ -269,11 +262,13 @@ async function createImageAttachment(
   fileName: string,
   mimeType: string,
   prompt: string,
+  req: Request,
 ): Promise<ChatAttachment | undefined> {
   const imageFormat = getImageOutputFormat(mimeType);
 
   if (!imageFormat) return undefined;
 
+  reserveImage(req);
   const imageResponse = await openai.images.generate({
     model: "gpt-image-1-mini",
     prompt,
@@ -318,6 +313,7 @@ function createPdfBuffer(text: string) {
 
 async function createChatAttachment(
   chatResponse: ChatStructuredResponse,
+  req: Request,
 ): Promise<ChatAttachment | undefined> {
   if (
     !chatResponse.shouldCreateFile ||
@@ -345,6 +341,7 @@ async function createChatAttachment(
       fileName,
       chatResponse.mimeType,
       chatResponse.fileContent,
+      req,
     );
   }
 
@@ -381,23 +378,33 @@ function parseAnalysis(text: string): ObjectAnalysis {
   }
 }
 
-router.post("/object", upload.single("object"), async (req, res) => {
-  const sessionId = getSessionId(req);
+router.use((req, res, next) => {
+  if (req.path === "/appType") return next();
+  const sessionId = req.get("x-session-id");
+  if (!sessionId || sessionId.length > 128)
+    return res
+      .status(400)
+      .json({ error: "A session ID of at most 128 characters is required." });
+  next();
+});
 
-  if (!hasDemoAccess(req)) {
-    return sendUnauthorizedDemoResponse(res);
-  }
-  const file = req.file;
+router.post(
+  "/object",
+  enforceUsage,
+  upload.single("object"),
+  async (req, res) => {
+    const sessionId = getSessionId(req);
+    const file = req.file;
 
-  if (!file) {
-    return res.status(400).json({ error: "No object uploaded" });
-  }
+    if (!file) {
+      return res.status(400).json({ error: "No object uploaded" });
+    }
 
-  const filePath = path.resolve(file.path);
-  const ext = path.extname(file.originalname).toLowerCase();
+    const filePath = path.resolve(file.path);
+    const ext = path.extname(file.originalname).toLowerCase();
 
-  try {
-    const analysisPrompt = `
+    try {
+      const analysisPrompt = `
 Analyze this uploaded object for a futuristic spatial AI workspace.
 
 Return JSON only:
@@ -408,111 +415,125 @@ Return JSON only:
 }
 `;
 
-    let response;
+      let response;
 
-    if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
-      response = await openai.responses.create({
-        model: "gpt-4.1-mini",
-        input: [
-          {
-            role: "user",
-            content: [
-              { type: "input_text", text: analysisPrompt },
-              {
-                type: "input_image",
-                image_url: toDataUrl(filePath, file.mimetype),
-                detail: "auto",
-              },
-            ],
-          },
-        ],
-      });
-    } else if (file.mimetype === "application/pdf" || ext === ".pdf") {
-      const uploadedFile = await openai.files.create({
-        file: await toFile(fs.createReadStream(filePath), file.originalname, {
-          type: file.mimetype,
-        }),
-        purpose: "user_data",
+      if (IMAGE_MIME_TYPES.includes(file.mimetype)) {
+        response = await openai.responses.create({
+          model: "gpt-4.1-mini",
+          max_output_tokens: hasDemoAccess(req) ? 4096 : 1200,
+          input: [
+            {
+              role: "user",
+              content: [
+                { type: "input_text", text: analysisPrompt },
+                {
+                  type: "input_image",
+                  image_url: toDataUrl(filePath, file.mimetype),
+                  detail: "auto",
+                },
+              ],
+            },
+          ],
+        });
+      } else if (file.mimetype === "application/pdf" || ext === ".pdf") {
+        const uploadedFile = await openai.files.create({
+          file: await toFile(fs.createReadStream(filePath), file.originalname, {
+            type: file.mimetype,
+          }),
+          purpose: "user_data",
+        });
+
+        response = await openai.responses.create({
+          model: "gpt-4.1-mini",
+          max_output_tokens: hasDemoAccess(req) ? 4096 : 1200,
+          input: [
+            {
+              role: "user",
+              content: [
+                { type: "input_file", file_id: uploadedFile.id },
+                { type: "input_text", text: analysisPrompt },
+              ],
+            },
+          ],
+        });
+      } else if (TEXT_EXTENSIONS.includes(ext)) {
+        const content = fs
+          .readFileSync(filePath, "utf8")
+          .slice(0, hasDemoAccess(req) ? 120_000 : 12_000);
+
+        response = await openai.responses.create({
+          model: "gpt-4.1-mini",
+          max_output_tokens: hasDemoAccess(req) ? 4096 : 1200,
+          input: [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "input_text",
+                  text: `${analysisPrompt}\n\nFilename: ${file.originalname}\n\nContent:\n${content}`,
+                },
+              ],
+            },
+          ],
+        });
+      } else {
+        return res.status(400).json({ error: "Unsupported file type" });
+      }
+
+      const result = parseAnalysis(response.output_text);
+
+      const aiText = `I inspected ${result.detectedType}. ${result.summary}`;
+
+      addAssistantMessage(sessionId, aiText, "object");
+
+      const speech = await openai.audio.speech.create({
+        model: "gpt-4o-mini-tts",
+        voice: "alloy",
+        input: aiText.slice(0, 4000),
       });
 
-      response = await openai.responses.create({
-        model: "gpt-4.1-mini",
-        input: [
-          {
-            role: "user",
-            content: [
-              { type: "input_file", file_id: uploadedFile.id },
-              { type: "input_text", text: analysisPrompt },
-            ],
-          },
-        ],
-      });
-    } else if (TEXT_EXTENSIONS.includes(ext)) {
-      const content = fs.readFileSync(filePath, "utf8").slice(0, 120_000);
+      const audioBuffer = Buffer.from(await speech.arrayBuffer());
 
-      response = await openai.responses.create({
-        model: "gpt-4.1-mini",
-        input: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "input_text",
-                text: `${analysisPrompt}\n\nFilename: ${file.originalname}\n\nContent:\n${content}`,
-              },
-            ],
-          },
-        ],
+      setObjectContext(sessionId, {
+        summary: result.summary,
+        fileName: file.originalname,
+        detectedType: result.detectedType,
       });
-    } else {
-      return res.status(400).json({ error: "Unsupported file type" });
+
+      addUserMessage(
+        sessionId,
+        `The user uploaded ${file.originalname}. Object summary: ${result.summary}`,
+        "object",
+      );
+
+      res.json({
+        objectId: randomUUID(),
+        ...result,
+        transcript: `Uploaded ${file.originalname}`,
+        reply: aiText,
+        audio: audioBuffer.toString("base64"),
+        mimeType: "audio/mpeg",
+        emotion: detectEmotion(aiText),
+        gesture: detectGesture(aiText),
+      });
+    } catch (error) {
+      if (error instanceof UsageLimitError) {
+        if (req.file && fs.existsSync(req.file.path))
+          fs.unlinkSync(req.file.path);
+        return res
+          .set("Retry-After", String(error.retryAfter))
+          .status(429)
+          .json({ error: error.message, retryAfter: error.retryAfter });
+      }
+      console.error("AI request failed");
+      res.status(500).json({ error: "Object analysis failed" });
+    } finally {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
     }
-
-    const result = parseAnalysis(response.output_text);
-
-    const aiText = `I inspected ${result.detectedType}. ${result.summary}`;
-
-    addAssistantMessage(sessionId, aiText, "object");
-
-    const speech = await openai.audio.speech.create({
-      model: "gpt-4o-mini-tts",
-      voice: "alloy",
-      input: aiText,
-    });
-
-    const audioBuffer = Buffer.from(await speech.arrayBuffer());
-
-    setObjectContext(sessionId, {
-      summary: result.summary,
-      fileName: file.originalname,
-      detectedType: result.detectedType,
-    });
-
-    addUserMessage(
-      sessionId,
-      `The user uploaded ${file.originalname}. Object summary: ${result.summary}`,
-      "object",
-    );
-
-    res.json({
-      objectId: randomUUID(),
-      ...result,
-      transcript: `Uploaded ${file.originalname}`,
-      reply: aiText,
-      audio: audioBuffer.toString("base64"),
-      mimeType: "audio/mpeg",
-      emotion: detectEmotion(aiText),
-      gesture: detectGesture(aiText),
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Object analysis failed" });
-  } finally {
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  }
-});
+  },
+);
 
 router.delete("/object", (req, res) => {
   const sessionId = getSessionId(req);
@@ -521,31 +542,24 @@ router.delete("/object", (req, res) => {
   res.status(204).send();
 });
 
-// returns if this is demo or normal mode
-router.get("/appType", async (req, res) => {
-  const { DemoToken } = req.body;
-  if (DemoToken == demoModeToken) {
-    res.json({
-      allowed: true,
-    });
-    //return ()
-  } else {
-    res
-      .status(500)
-      .json({ error: "Not allowed, please contact the developer" });
-  }
-  return DemoToken.value;
+// Read-only mode discovery uses the same header authentication as AI requests.
+router.get("/appType", (req, res) => {
+  res.json({
+    allowed: true,
+    mode: hasDemoAccess(req) ? "demo" : "normal",
+    limits: usageLimits,
+  });
 });
 
 // Text messages
-router.post("/chat", async (req, res) => {
+router.post("/chat", enforceUsage, async (req, res) => {
   try {
     const sessionId = getSessionId(req);
-
-    if (!hasDemoAccess(req)) {
-      return sendUnauthorizedDemoResponse(res);
-    }
     const { message } = req.body;
+    if (typeof message === "string" && message.length > 4000)
+      return res
+        .status(400)
+        .json({ error: "Please keep messages under 4,000 characters." });
 
     if (typeof message !== "string" || !message.trim()) {
       return res.status(400).json({ error: "Message is required" });
@@ -556,6 +570,7 @@ router.post("/chat", async (req, res) => {
 
       const response = await openai.responses.create({
         model: "gpt-4.1-mini",
+        max_output_tokens: hasDemoAccess(req) ? 4096 : 1200,
         input: [
           CHAT_FILE_INSTRUCTIONS,
           ...getConversationInput(sessionId, message),
@@ -609,8 +624,9 @@ router.post("/chat", async (req, res) => {
             createImageFileName(imageGenerationPrompt),
             "image/png",
             imageGenerationPrompt,
+            req,
           )
-        : await createChatAttachment(chatResponse);
+        : await createChatAttachment(chatResponse, req);
       const responseText =
         imageGenerationPrompt && attachment
           ? "I generated the image. You can download it below."
@@ -632,7 +648,7 @@ router.post("/chat", async (req, res) => {
       const speech = await openai.audio.speech.create({
         model: "gpt-4o-mini-tts",
         voice: "alloy",
-        input: responseText,
+        input: responseText.slice(0, 4000),
       });
 
       const audioBuffer = Buffer.from(await speech.arrayBuffer());
@@ -648,19 +664,27 @@ router.post("/chat", async (req, res) => {
       });
     });
   } catch (error) {
-    console.error(error);
+    if (error instanceof UsageLimitError) {
+      if (req.file && fs.existsSync(req.file.path))
+        fs.unlinkSync(req.file.path);
+      return res
+        .set("Retry-After", String(error.retryAfter))
+        .status(429)
+        .json({ error: error.message, retryAfter: error.retryAfter });
+    }
+    console.error("AI request failed");
     res.status(500).json({ error: "AI request failed" });
   }
 });
 
 // SPeech endpoint
-router.post("/speech", async (req, res) => {
+router.post("/speech", enforceUsage, async (req, res) => {
   try {
-    if (!hasDemoAccess(req)) {
-      return sendUnauthorizedDemoResponse(res);
-    }
-
     const { text } = req.body;
+    if (typeof text === "string" && text.length > 4000)
+      return res
+        .status(400)
+        .json({ error: "Please keep speech under 4,000 characters." });
 
     if (typeof text !== "string" || !text.trim()) {
       return res.status(400).json({ error: "Text is required" });
@@ -679,154 +703,179 @@ router.post("/speech", async (req, res) => {
       mimeType: "audio/mpeg",
     });
   } catch (error) {
-    console.error(error);
+    if (error instanceof UsageLimitError) {
+      if (req.file && fs.existsSync(req.file.path))
+        fs.unlinkSync(req.file.path);
+      return res
+        .set("Retry-After", String(error.retryAfter))
+        .status(429)
+        .json({ error: error.message, retryAfter: error.retryAfter });
+    }
+    console.error("AI request failed");
     res.status(500).json({ error: "Speech request failed" });
   }
 });
 
 // Voice messages
-router.post("/voice", upload.single("audio"), async (req, res) => {
-  const sessionId = getSessionId(req);
+router.post(
+  "/voice",
+  enforceUsage,
+  upload.single("audio"),
+  async (req, res) => {
+    const sessionId = getSessionId(req);
+    const file = req.file;
 
-  if (!hasDemoAccess(req)) {
-    return sendUnauthorizedDemoResponse(res);
-  }
-  const file = req.file;
-
-  if (!file) {
-    return res.status(400).json({ error: "No audio file uploaded" });
-  }
-
-  try {
-    const audioPath = path.resolve(file.path);
-
-    const transcription = await openai.audio.transcriptions.create({
-      file: await toFile(
-        fs.createReadStream(audioPath),
-        file.originalname || "voice.webm",
-        { type: file.mimetype },
-      ),
-      model: "gpt-4o-mini-transcribe",
-    });
-
-    const userText = transcription.text?.trim();
-
-    if (!userText) {
-      fs.unlinkSync(audioPath);
-      return res.status(400).json({ error: "No speech detected" });
+    if (!file) {
+      return res.status(400).json({ error: "No audio file uploaded" });
     }
 
-    const imageGenerationPrompt = getImageGenerationPrompt(userText);
+    try {
+      const audioPath = path.resolve(file.path);
 
-    await runWithSessionLock(sessionId, async () => {
-      const response = await openai.responses.create({
-        model: "gpt-4.1-mini",
-        input: [
-          CHAT_FILE_INSTRUCTIONS,
-          ...getConversationInput(sessionId, userText),
-        ],
-        text: {
-          format: {
-            type: "json_schema",
-            name: "chat_response",
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                reply: { type: "string" },
-                shouldCreateFile: { type: "boolean" },
-                fileName: { type: ["string", "null"] },
-                mimeType: { type: ["string", "null"] },
-                fileContent: { type: ["string", "null"] },
-                steps: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                      type: {
-                        type: "string",
-                        enum: ["status", "result"],
+      const transcription = await openai.audio.transcriptions.create({
+        file: await toFile(
+          fs.createReadStream(audioPath),
+          file.originalname || "voice.webm",
+          { type: file.mimetype },
+        ),
+        model: "gpt-4o-mini-transcribe",
+      });
+
+      const userText = transcription.text?.trim();
+
+      if (!userText) {
+        fs.unlinkSync(audioPath);
+        return res.status(400).json({ error: "No speech detected" });
+      }
+
+      if (userText.length > 4000) {
+        fs.unlinkSync(audioPath);
+        return res
+          .status(400)
+          .json({ error: "Please use a shorter voice message." });
+      }
+      const imageGenerationPrompt = getImageGenerationPrompt(userText);
+
+      await runWithSessionLock(sessionId, async () => {
+        const response = await openai.responses.create({
+          model: "gpt-4.1-mini",
+          max_output_tokens: hasDemoAccess(req) ? 4096 : 1200,
+          input: [
+            CHAT_FILE_INSTRUCTIONS,
+            ...getConversationInput(sessionId, userText),
+          ],
+          text: {
+            format: {
+              type: "json_schema",
+              name: "chat_response",
+              schema: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  reply: { type: "string" },
+                  shouldCreateFile: { type: "boolean" },
+                  fileName: { type: ["string", "null"] },
+                  mimeType: { type: ["string", "null"] },
+                  fileContent: { type: ["string", "null"] },
+                  steps: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      properties: {
+                        type: {
+                          type: "string",
+                          enum: ["status", "result"],
+                        },
+                        text: { type: "string" },
+                        speak: { type: "boolean" },
                       },
-                      text: { type: "string" },
-                      speak: { type: "boolean" },
+                      required: ["type", "text", "speak"],
                     },
-                    required: ["type", "text", "speak"],
                   },
                 },
+                required: [
+                  "reply",
+                  "shouldCreateFile",
+                  "fileName",
+                  "mimeType",
+                  "fileContent",
+                  "steps",
+                ],
               },
-              required: [
-                "reply",
-                "shouldCreateFile",
-                "fileName",
-                "mimeType",
-                "fileContent",
-                "steps",
-              ],
             },
           },
-        },
+        });
+
+        const chatResponse = parseChatResponse(response.output_text);
+        const aiText = chatResponse.reply;
+        const attachment = imageGenerationPrompt
+          ? await createImageAttachment(
+              createImageFileName(imageGenerationPrompt),
+              "image/png",
+              imageGenerationPrompt,
+              req,
+            )
+          : await createChatAttachment(chatResponse, req);
+        const responseText =
+          imageGenerationPrompt && attachment
+            ? "I generated the image. You can download it below."
+            : aiText;
+
+        const steps =
+          imageGenerationPrompt && attachment
+            ? [
+                {
+                  type: "result" as const,
+                  text: responseText,
+                  speak: true,
+                },
+              ]
+            : chatResponse.steps;
+
+        addAssistantMessage(sessionId, responseText);
+
+        const speech = await openai.audio.speech.create({
+          model: "gpt-4o-mini-tts",
+          voice: "echo",
+          input: responseText.slice(0, 4000),
+          //format: "mp3",
+        });
+
+        const audioBuffer = Buffer.from(await speech.arrayBuffer());
+
+        fs.unlinkSync(audioPath);
+
+        res.json({
+          transcript: userText,
+          steps,
+          reply: responseText,
+          audio: audioBuffer.toString("base64"),
+          mimeType: "audio/mpeg",
+          emotion: detectEmotion(responseText),
+          gesture: detectGesture(responseText),
+          ...(attachment ? { attachment } : {}),
+        });
       });
+    } catch (error) {
+      if (error instanceof UsageLimitError) {
+        if (req.file && fs.existsSync(req.file.path))
+          fs.unlinkSync(req.file.path);
+        return res
+          .set("Retry-After", String(error.retryAfter))
+          .status(429)
+          .json({ error: error.message, retryAfter: error.retryAfter });
+      }
+      console.error("AI request failed");
 
-      const chatResponse = parseChatResponse(response.output_text);
-      const aiText = chatResponse.reply;
-      const attachment = imageGenerationPrompt
-        ? await createImageAttachment(
-            createImageFileName(imageGenerationPrompt),
-            "image/png",
-            imageGenerationPrompt,
-          )
-        : await createChatAttachment(chatResponse);
-      const responseText =
-        imageGenerationPrompt && attachment
-          ? "I generated the image. You can download it below."
-          : aiText;
+      if (fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
+      }
 
-      const steps =
-        imageGenerationPrompt && attachment
-          ? [
-              {
-                type: "result" as const,
-                text: responseText,
-                speak: true,
-              },
-            ]
-          : chatResponse.steps;
-
-      addAssistantMessage(sessionId, responseText);
-
-      const speech = await openai.audio.speech.create({
-        model: "gpt-4o-mini-tts",
-        voice: "echo",
-        input: responseText,
-        //format: "mp3",
-      });
-
-      const audioBuffer = Buffer.from(await speech.arrayBuffer());
-
-      fs.unlinkSync(audioPath);
-
-      res.json({
-        transcript: userText,
-        steps,
-        reply: responseText,
-        audio: audioBuffer.toString("base64"),
-        mimeType: "audio/mpeg",
-        emotion: detectEmotion(responseText),
-        gesture: detectGesture(responseText),
-        ...(attachment ? { attachment } : {}),
-      });
-    });
-  } catch (error) {
-    console.error(error);
-
-    if (fs.existsSync(file.path)) {
-      fs.unlinkSync(file.path);
+      res.status(500).json({ error: "Voice request failed" });
     }
-
-    res.status(500).json({ error: "Voice request failed" });
-  }
-});
+  },
+);
 
 type DetectedEmotion = "neutral" | "happy" | "sad" | "angry" | "bored";
 
@@ -979,7 +1028,6 @@ function detectEmotion(text: string): DetectedEmotion {
 }
 
 function detectGesture(text: string): DetectedGesture {
-  console.log("detecting gesture", text);
   const lower = text
     .toLowerCase()
     .replace(/[’‘`]/g, "'")
@@ -1013,5 +1061,19 @@ function getSessionId(req: Request) {
 
   return sessionId;
 }
+
+router.use(
+  (error: unknown, _req: Request, res: Response, next: NextFunction) => {
+    if (error instanceof multer.MulterError) {
+      res
+        .status(413)
+        .json({
+          error: "Upload too large or invalid. Send one file up to 5 MB.",
+        });
+      return;
+    }
+    next(error);
+  },
+);
 
 export default router;

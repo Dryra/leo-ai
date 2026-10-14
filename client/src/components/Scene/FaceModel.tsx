@@ -237,7 +237,6 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
         allMeshes.push(object as THREE.Mesh);
       }
       if (isMorphMesh(object)) {
-        console.log("morph mesh", object);
         morphMeshes.push(object);
       }
     });
@@ -744,7 +743,6 @@ export function FaceModel({ facialExpression }: FaceModelProps) {
 
       setMorphTarget(mesh, "browInnerUp", mouthMovement, 0.35);
     });
-
   });
 
   return (

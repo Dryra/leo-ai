@@ -22,3 +22,5 @@ server/uploads
 
 # Vite
 client/.vite
+# Persistent anonymous API usage counters
+server/data/
